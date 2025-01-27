@@ -11,7 +11,7 @@ pub struct Config {
 
     #[serde(skip_serializing_if = "Vec::is_empty")]
     #[serde(default)]
-    pub profiles: Vec<Profile>,
+    pub profiles: Vec<PathBuf>,
 
     #[serde(skip_serializing_if = "is_zero")]
     #[serde(default)]
