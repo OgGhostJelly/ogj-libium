@@ -32,15 +32,17 @@ pub fn read_profile(path: impl AsRef<Path>) -> Result<Option<structs::Profile>> 
     let file = match File::open(&path) {
         Ok(file) => file,
         Err(e) if matches!(e.kind(), std::io::ErrorKind::NotFound) => return Ok(None),
-        Err(e) => return Err(e.into()),
+        Err(e) => return Err(e),
     };
 
     let profile_file = BufReader::new(file);
     let mut profile: structs::Profile = serde_json::from_reader(profile_file)?;
-    
+
     profile.backwards_compat();
 
-    profile.mods.sort_unstable_by_key(|mod_| mod_.name.to_lowercase());
+    profile
+        .mods
+        .sort_unstable_by_key(|mod_| mod_.name.to_lowercase());
 
     Ok(Some(profile))
 }

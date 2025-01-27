@@ -79,10 +79,7 @@ pub struct Profile {
 
 impl Profile {
     /// A simple contructor that automatically deals with converting to filters
-    pub fn new(
-        game_versions: Vec<String>,
-        mod_loader: ModLoader,
-    ) -> Self {
+    pub fn new(game_versions: Vec<String>, mod_loader: ModLoader) -> Self {
         Self {
             filters: vec![
                 Filter::ModLoaderPrefer(match mod_loader {
