@@ -24,17 +24,22 @@ pub struct Config {
 
 #[derive(Deserialize, Serialize, Debug, Default, Clone)]
 pub struct ProfileItem {
+    /// The path to the profile `.json` file.
     pub path: PathBuf,
+    /// The unique name of the profile.
     pub name: String,
+    /// The directory to download mod files to
+    pub output_dir: PathBuf,
 }
 
 impl ProfileItem {
-    pub fn from_name(name: String) -> std::io::Result<Self> {
+    pub fn infer_path(name: String, output_dir: PathBuf) -> std::io::Result<Self> {
         let mut path = current_dir()?.join(&name);
         path.set_extension("json");
         Ok(Self {
             path,
             name,
+            output_dir,
         })
     }
 }
@@ -59,9 +64,6 @@ pub enum ModpackIdentifier {
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Profile {
-    /// The directory to download mod files to
-    pub output_dir: PathBuf,
-
     // There will be no filters when reading a v4 config
     #[serde(default)]
     pub filters: Vec<Filter>,
@@ -78,12 +80,10 @@ pub struct Profile {
 impl Profile {
     /// A simple contructor that automatically deals with converting to filters
     pub fn new(
-        output_dir: PathBuf,
         game_versions: Vec<String>,
         mod_loader: ModLoader,
     ) -> Self {
         Self {
-            output_dir,
             filters: vec![
                 Filter::ModLoaderPrefer(match mod_loader {
                     ModLoader::Quilt => vec![ModLoader::Quilt, ModLoader::Fabric],
