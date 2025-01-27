@@ -54,7 +54,7 @@ pub fn write_config(path: impl AsRef<Path>, config: &structs::Config) -> Result<
 
 /// Serialise `profile` and write it to the profile file at `path`
 pub fn write_profile(path: impl AsRef<Path>, profile: &structs::Profile) -> Result<()> {
-    let profile_file = File::create(path)?;
+    let profile_file = File::create(&path)?;
     serde_json::to_writer_pretty(profile_file, profile)?;
     Ok(())
 }
