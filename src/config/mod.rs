@@ -23,19 +23,38 @@ pub fn read_config(path: impl AsRef<Path>) -> Result<structs::Config> {
     }
 
     let config_file = BufReader::new(File::open(&path)?);
-    let mut config: structs::Config = serde_json::from_reader(config_file)?;
-
-    config
-        .profiles
-        .iter_mut()
-        .for_each(structs::Profile::backwards_compat);
+    let config: structs::Config = serde_json::from_reader(config_file)?;
 
     Ok(config)
+}
+
+pub fn read_profile(path: impl AsRef<Path>) -> Result<Option<structs::Profile>> {
+    let file = match File::open(&path) {
+        Ok(file) => file,
+        Err(e) if matches!(e.kind(), std::io::ErrorKind::NotFound) => return Ok(None),
+        Err(e) => return Err(e.into()),
+    };
+
+    let profile_file = BufReader::new(file);
+    let mut profile: structs::Profile = serde_json::from_reader(profile_file)?;
+    
+    profile.backwards_compat();
+
+    profile.mods.sort_unstable_by_key(|mod_| mod_.name.to_lowercase());
+
+    Ok(Some(profile))
 }
 
 /// Serialise `config` and write it to the config file at `path`
 pub fn write_config(path: impl AsRef<Path>, config: &structs::Config) -> Result<()> {
     let config_file = File::create(path)?;
     serde_json::to_writer_pretty(config_file, config)?;
+    Ok(())
+}
+
+/// Serialise `profile` and write it to the profile file at `path`
+pub fn write_profile(path: impl AsRef<Path>, profile: &structs::Profile) -> Result<()> {
+    let profile_file = File::create(&path)?;
+    serde_json::to_writer_pretty(profile_file, profile)?;
     Ok(())
 }
