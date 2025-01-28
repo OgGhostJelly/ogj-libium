@@ -1,7 +1,7 @@
 use super::filters::Filter;
 use derive_more::derive::Display;
 use serde::{Deserialize, Serialize};
-use std::{env::current_dir, path::PathBuf, str::FromStr};
+use std::{path::PathBuf, str::FromStr};
 
 #[derive(Deserialize, Serialize, Debug, Default, Clone)]
 pub struct Config {
@@ -30,18 +30,6 @@ pub struct ProfileItem {
     pub name: String,
     /// The directory to download mod files to
     pub output_dir: PathBuf,
-}
-
-impl ProfileItem {
-    pub fn infer_path(name: String, output_dir: PathBuf) -> std::io::Result<Self> {
-        let mut path = current_dir()?.join(&name);
-        path.set_extension("json");
-        Ok(Self {
-            path,
-            name,
-            output_dir,
-        })
-    }
 }
 
 const fn is_zero(n: &usize) -> bool {
