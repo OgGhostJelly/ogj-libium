@@ -30,7 +30,7 @@ pub static MODRINTH_API: LazyLock<ferinth::Ferinth> = LazyLock::new(|| {
         "ferium",
         // TODO: option_env!("CARGO_PKG_VERSION"),
         None,
-        Some("Discord: therookiecoder"),
+        Some("Discord: ogghostjelly"),
         None,
     )
     .expect("Could not build Modrinth client") // This should never fail since no `authorisation` token was provided
