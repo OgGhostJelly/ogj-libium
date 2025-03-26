@@ -1,7 +1,7 @@
 use super::filters::Filter;
 use derive_more::derive::Display;
 use serde::{Deserialize, Serialize};
-use std::{path::PathBuf, str::FromStr};
+use std::{env::current_dir, path::PathBuf, str::FromStr};
 
 #[derive(Deserialize, Serialize, Debug, Default, Clone)]
 pub struct Config {
@@ -11,7 +11,7 @@ pub struct Config {
 
     #[serde(skip_serializing_if = "Vec::is_empty")]
     #[serde(default)]
-    pub profiles: Vec<Profile>,
+    pub profiles: Vec<ProfileItem>,
 
     #[serde(skip_serializing_if = "is_zero")]
     #[serde(default)]
@@ -20,6 +20,28 @@ pub struct Config {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     #[serde(default)]
     pub modpacks: Vec<Modpack>,
+}
+
+#[derive(Deserialize, Serialize, Debug, Default, Clone)]
+pub struct ProfileItem {
+    /// The path to the profile `.json` file.
+    pub path: PathBuf,
+    /// The unique name of the profile.
+    pub name: String,
+    /// The directory to download mod files to
+    pub output_dir: PathBuf,
+}
+
+impl ProfileItem {
+    pub fn infer_path(name: String, output_dir: PathBuf) -> std::io::Result<Self> {
+        let mut path = current_dir()?.join(&name);
+        path.set_extension("json");
+        Ok(Self {
+            path,
+            name,
+            output_dir,
+        })
+    }
 }
 
 const fn is_zero(n: &usize) -> bool {
@@ -42,11 +64,6 @@ pub enum ModpackIdentifier {
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Profile {
-    pub name: String,
-
-    /// The directory to download mod files to
-    pub output_dir: PathBuf,
-
     // There will be no filters when reading a v4 config
     #[serde(default)]
     pub filters: Vec<Filter>,
@@ -63,14 +80,10 @@ pub struct Profile {
 impl Profile {
     /// A simple contructor that automatically deals with converting to filters
     pub fn new(
-        name: String,
-        output_dir: PathBuf,
         game_versions: Vec<String>,
         mod_loader: ModLoader,
     ) -> Self {
         Self {
-            name,
-            output_dir,
             filters: vec![
                 Filter::ModLoaderPrefer(match mod_loader {
                     ModLoader::Quilt => vec![ModLoader::Quilt, ModLoader::Fabric],
