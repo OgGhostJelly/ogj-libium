@@ -3,10 +3,7 @@ pub mod mod_downloadable;
 pub mod modpack_downloadable;
 
 use crate::{
-    config::{
-        filters::ReleaseChannel,
-        structs::{ModIdentifier, ModLoader},
-    },
+    config::structs::{ModIdentifier, ModLoader, ReleaseChannel},
     iter_ext::IterExt as _,
     modpack::modrinth::structs::ModpackFile as ModpackModFile,
     version_ext::VersionExt,

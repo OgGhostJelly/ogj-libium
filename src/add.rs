@@ -1,7 +1,6 @@
 use crate::{
-    config::{
-        filters::{Filter, ReleaseChannel},
-        structs::{ModIdentifier, ModLoader, Profile},
+    config::structs::{
+        Filters, ModIdentifier, ModLoader, Profile, ReleaseChannel, Source, SourceId,
     },
     iter_ext::IterExt as _,
     upgrade::{check, Metadata},
@@ -105,8 +104,7 @@ pub async fn add(
     profile: &mut Profile,
     identifiers: Vec<ModIdentifier>,
     perform_checks: bool,
-    override_profile: bool,
-    filters: Vec<Filter>,
+    filters: Option<Filters>,
 ) -> Result<(Vec<String>, Vec<(String, Error)>)> {
     let mut mr_ids = Vec::new();
     let mut cf_ids = Vec::new();
@@ -248,15 +246,7 @@ pub async fn add(
             cf_ids.swap_remove(i);
         }
 
-        match curseforge(
-            &project,
-            profile,
-            perform_checks,
-            override_profile,
-            filters.clone(),
-        )
-        .await
-        {
+        match curseforge(&project, profile, perform_checks, filters.clone()).await {
             Ok(_) => success_names.push(project.name),
             Err(err) => errors.push((format!("{} ({})", project.name, project.id), err)),
         }
@@ -275,15 +265,7 @@ pub async fn add(
             mr_ids.swap_remove(i);
         }
 
-        match modrinth(
-            &project,
-            profile,
-            perform_checks,
-            override_profile,
-            filters.clone(),
-        )
-        .await
-        {
+        match modrinth(&project, profile, perform_checks, filters.clone()).await {
             Ok(_) => success_names.push(project.title),
             Err(err) => errors.push((format!("{} ({})", project.title, project.id), err)),
         }
@@ -295,15 +277,7 @@ pub async fn add(
     );
 
     for (repo, asset_names) in gh_repos {
-        match github(
-            &repo,
-            profile,
-            Some(asset_names),
-            override_profile,
-            filters.clone(),
-        )
-        .await
-        {
+        match github(&repo, profile, Some(asset_names), filters.clone()).await {
             Ok(_) => success_names.push(format!("{}/{}", repo.0, repo.1)),
             Err(err) => errors.push((format!("{}/{}", repo.0, repo.1), err)),
         }
@@ -320,41 +294,36 @@ pub async fn github(
     id: &(impl AsRef<str> + ToString, impl AsRef<str> + ToString),
     profile: &mut Profile,
     perform_checks: Option<Vec<Metadata>>,
-    override_profile: bool,
-    filters: Vec<Filter>,
+    filters: Option<Filters>,
 ) -> Result<()> {
     // Check if project has already been added
-    if profile.mods.iter().any(|mod_| {
-        mod_.name.eq_ignore_ascii_case(id.1.as_ref())
-            || matches!(
-                &mod_.identifier,
-                ModIdentifier::GitHubRepository(owner, repo) if owner == id.0.as_ref() && repo == id.1.as_ref(),
-            )
-    }) {
+    if profile_contains(
+        &profile.mods,
+        |source| matches!(source, SourceId::Github(owner, repo) if owner == id.0.as_ref() && repo == id.1.as_ref()),
+    ) {
         return Err(Error::AlreadyAdded);
-    }
+    };
 
     if let Some(download_files) = perform_checks {
         // Check if the repo is compatible
         check::select_latest(
             download_files.iter(),
-            if override_profile {
-                profile.filters.clone()
-            } else {
-                [profile.filters.clone(), filters.clone()].concat()
+            match &filters {
+                Some(filters) => vec![&profile.filters, &filters],
+                None => vec![&profile.filters],
             },
         )
         .await?;
     }
 
+    let repo = id.0.as_ref().trim();
+    let user = id.1.as_ref().trim();
+
     // Add it to the profile
     profile.push_mod(
-        id.1.as_ref().trim().to_string(),
-        ModIdentifier::GitHubRepository(id.0.to_string(), id.1.to_string()),
-        id.1.as_ref().trim().to_string(),
-        override_profile,
-        filters,
-    );
+        format!("{repo}/{user}"),
+        Source::github(repo.into(), user.into(), filters),
+    )?;
 
     Ok(())
 }
@@ -367,17 +336,13 @@ pub async fn modrinth(
     project: &Project,
     profile: &mut Profile,
     perform_checks: bool,
-    override_profile: bool,
-    filters: Vec<Filter>,
+    filters: Option<Filters>,
 ) -> Result<()> {
     // Check if project has already been added
-    if profile.mods.iter().any(|mod_| {
-        mod_.name.eq_ignore_ascii_case(&project.title)
-            || matches!(
-                &mod_.identifier,
-                ModIdentifier::ModrinthProject(id) if id == &project.id,
-            )
-    }) {
+    if profile_contains(
+        &profile.mods,
+        |source| matches!(source, SourceId::Modrinth(id) if id == &project.id),
+    ) {
         Err(Error::AlreadyAdded)
 
     // Check if the project is a mod
@@ -401,34 +366,18 @@ pub async fn modrinth(
                     channel: ReleaseChannel::Release,
                 }]
                 .iter(),
-                if override_profile {
-                    profile.filters.clone()
-                } else {
-                    [profile.filters.clone(), filters.clone()].concat()
-                }
-                .iter()
-                .filter(|f| {
-                    matches!(
-                        f,
-                        Filter::GameVersionStrict(_)
-                            | Filter::GameVersionMinor(_)
-                            | Filter::ModLoaderAny(_)
-                            | Filter::ModLoaderPrefer(_)
-                    )
-                })
-                .cloned()
-                .collect_vec(),
+                match &filters {
+                    Some(filters) => vec![&profile.filters, &filters],
+                    None => vec![&profile.filters],
+                },
             )
             .await?;
         }
         // Add it to the profile
         profile.push_mod(
-            project.title.trim().to_owned(),
-            ModIdentifier::ModrinthProject(project.id.clone()),
-            project.slug.to_owned(),
-            override_profile,
-            filters,
-        );
+            project.slug.clone(),
+            Source::modrinth(project.id.clone(), filters),
+        )?;
         Ok(())
     }
 }
@@ -439,14 +388,13 @@ pub async fn curseforge(
     project: &furse::structures::mod_structs::Mod,
     profile: &mut Profile,
     perform_checks: bool,
-    override_profile: bool,
-    filters: Vec<Filter>,
+    filters: Option<Filters>,
 ) -> Result<()> {
     // Check if project has already been added
-    if profile.mods.iter().any(|mod_| {
-        mod_.name.eq_ignore_ascii_case(&project.name)
-            || ModIdentifier::CurseForgeProject(project.id) == mod_.identifier
-    }) {
+    if profile_contains(
+        &profile.mods,
+        |source| matches!(source, SourceId::Curseforge(id) if *id == project.id),
+    ) {
         Err(Error::AlreadyAdded)
 
     // Check if it can be downloaded by third-parties
@@ -482,34 +430,46 @@ pub async fn curseforge(
                     channel: ReleaseChannel::Release,
                 }]
                 .iter(),
-                if override_profile {
-                    profile.filters.clone()
-                } else {
-                    [profile.filters.clone(), filters.clone()].concat()
-                }
-                .iter()
-                .filter(|f| {
-                    matches!(
-                        f,
-                        Filter::GameVersionStrict(_)
-                            | Filter::GameVersionMinor(_)
-                            | Filter::ModLoaderAny(_)
-                            | Filter::ModLoaderPrefer(_)
-                    )
-                })
-                .cloned()
-                .collect_vec(),
+                match &filters {
+                    Some(filters) => vec![&profile.filters, &filters],
+                    None => vec![&profile.filters],
+                },
             )
             .await?;
         }
+        // Add it to the profile
         profile.push_mod(
-            project.name.trim().to_string(),
-            ModIdentifier::CurseForgeProject(project.id),
             project.slug.clone(),
-            override_profile,
-            filters,
-        );
+            Source::curseforge(project.id, filters),
+        )?;
 
         Ok(())
+    }
+}
+
+pub fn profile_contains(
+    map: &HashMap<String, Source>,
+    pred: impl Clone + Fn(&SourceId) -> bool,
+) -> bool {
+    for (_, source) in map {
+        if source_contains(source, pred.clone()) {
+            return true;
+        }
+    }
+    false
+}
+
+pub fn source_contains(source: &Source, pred: impl Clone + Fn(&SourceId) -> bool) -> bool {
+    match source {
+        Source::Single(source_id) => pred(source_id),
+        Source::Multiple(sources) => {
+            for source in sources {
+                if source_contains(source, pred.clone()) {
+                    return true;
+                }
+            }
+            false
+        }
+        Source::Detailed { src, .. } => source_contains(src, pred),
     }
 }

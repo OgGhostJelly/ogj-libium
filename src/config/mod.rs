@@ -1,4 +1,3 @@
-pub mod filters;
 pub mod structs;
 
 use std::{
@@ -12,7 +11,7 @@ pub static DEFAULT_CONFIG_PATH: LazyLock<PathBuf> = LazyLock::new(|| {
     crate::HOME
         .join(".config")
         .join("ferium")
-        .join("config.json")
+        .join("ogj-config.json")
 });
 
 /// Open the config file at `path` and deserialise it into a config struct
@@ -36,11 +35,7 @@ pub fn read_profile(path: impl AsRef<Path>) -> Result<Option<structs::Profile>> 
     };
 
     let profile_file = BufReader::new(file);
-    let mut profile: structs::Profile = serde_json::from_reader(profile_file)?;
-    
-    profile.backwards_compat();
-
-    profile.mods.sort_unstable_by_key(|mod_| mod_.name.to_lowercase());
+    let profile: structs::Profile = serde_json::from_reader(profile_file)?;
 
     Ok(Some(profile))
 }
