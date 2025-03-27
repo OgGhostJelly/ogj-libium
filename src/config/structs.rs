@@ -34,9 +34,21 @@ pub struct ProfileItem {
 }
 
 impl ProfileItem {
-    pub fn infer_path(name: String, output_dir: PathBuf) -> std::io::Result<Self> {
-        let mut path = current_dir()?.join(&name);
-        path.set_extension("json");
+    pub fn infer_path(
+        path: Option<PathBuf>,
+        name: String,
+        output_dir: PathBuf,
+    ) -> std::io::Result<Self> {
+        let path = match path {
+            Some(path) => path,
+            None => {
+                let mut path = current_dir()?.join(&name);
+                path.set_extension("json");
+                path
+            }
+        }
+        .canonicalize()?;
+
         Ok(Self {
             path,
             name,
@@ -335,7 +347,7 @@ mod serde_version {
 
     pub fn serialize<S>(data: &T, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer
+        S: serde::Serializer,
     {
         if data.len() == 1 {
             data[0].serialize(serializer)
@@ -346,13 +358,13 @@ mod serde_version {
 
     pub fn deserialize<'de, D>(deserializer: D) -> Result<T, D::Error>
     where
-        D: serde::Deserializer<'de>
+        D: serde::Deserializer<'de>,
     {
         #[derive(Deserialize)]
         #[serde(untagged)]
         enum VersionList {
             Single(Version),
-            Multiple(Vec<Version>)
+            Multiple(Vec<Version>),
         }
 
         match VersionList::deserialize(deserializer)? {
