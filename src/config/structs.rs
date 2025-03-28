@@ -2,7 +2,7 @@ use crate::add;
 
 use derive_more::derive::Display;
 use serde::{de::Visitor, Deserialize, Serialize};
-use std::{collections::HashMap, env::current_dir, fmt, path::PathBuf, str::FromStr};
+use std::{collections::HashMap, env::current_dir, fmt, fs::File, path::PathBuf, str::FromStr};
 
 #[derive(Deserialize, Serialize, Debug, Default, Clone)]
 pub struct Config {
@@ -46,8 +46,11 @@ impl ProfileItem {
                 path.set_extension("json");
                 path
             }
-        }
-        .canonicalize()?;
+        };
+
+        let _ = File::create(&path)?;
+
+        let path = path.canonicalize()?;
 
         Ok(Self {
             path,
