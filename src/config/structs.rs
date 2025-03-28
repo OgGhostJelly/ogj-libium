@@ -122,28 +122,6 @@ impl Profile {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
-pub enum ModIdentifier {
-    CurseForgeProject(i32),
-    ModrinthProject(String),
-    GitHubRepository(String, String),
-
-    PinnedCurseForgeProject(i32, i32),
-    PinnedModrinthProject(String, String),
-    PinnedGitHubRepository((String, String), i32),
-}
-
-impl ModIdentifier {
-    pub fn to_source_id(self) -> SourceId {
-        match self {
-            ModIdentifier::CurseForgeProject(id) => SourceId::Curseforge(id),
-            ModIdentifier::ModrinthProject(id) => SourceId::Modrinth(id),
-            ModIdentifier::GitHubRepository(owner, repo) => SourceId::Github(owner, repo),
-            _ => todo!(),
-        }
-    }
-}
-
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(untagged)]
 pub enum Source {
@@ -218,11 +196,15 @@ impl Source {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SourceId {
     Curseforge(i32),
     Modrinth(String),
     Github(String, String),
+
+    PinnedCurseforge(i32, i32),
+    PinnedModrinth(String, String),
+    PinnedGithub((String, String), i32),
 }
 
 impl SourceId {
@@ -231,6 +213,7 @@ impl SourceId {
             SourceId::Curseforge(id) => format!("cf:{id}"),
             SourceId::Modrinth(id) => format!("mr:{id}"),
             SourceId::Github(owner, repo) => format!("gh:{owner}/{repo}"),
+            _ => todo!(),
         }
     }
 }

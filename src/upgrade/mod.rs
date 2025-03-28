@@ -3,7 +3,7 @@ pub mod mod_downloadable;
 pub mod modpack_downloadable;
 
 use crate::{
-    config::structs::{ModIdentifier, ModLoader, ReleaseChannel},
+    config::structs::{ModLoader, ReleaseChannel, SourceId},
     iter_ext::IterExt as _,
     modpack::modrinth::structs::ModpackFile as ModpackModFile,
     version_ext::VersionExt,
@@ -55,9 +55,9 @@ pub struct DownloadData {
     /// The length of the file in bytes
     pub length: usize,
     /// The dependencies this file has
-    pub dependencies: Vec<ModIdentifier>,
+    pub dependencies: Vec<SourceId>,
     /// Other mods this file is incompatible with
-    pub conflicts: Vec<ModIdentifier>,
+    pub conflicts: Vec<SourceId>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -96,7 +96,7 @@ pub fn try_from_cf_file(
                 .iter()
                 .filter_map(|d| {
                     if d.relation_type == CFFileRelationType::RequiredDependency {
-                        Some(ModIdentifier::CurseForgeProject(d.mod_id))
+                        Some(SourceId::Curseforge(d.mod_id))
                     } else {
                         None
                     }
@@ -107,7 +107,7 @@ pub fn try_from_cf_file(
                 .iter()
                 .filter_map(|d| {
                     if d.relation_type == CFFileRelationType::Incompatible {
-                        Some(ModIdentifier::CurseForgeProject(d.mod_id))
+                        Some(SourceId::Curseforge(d.mod_id))
                     } else {
                         None
                     }
@@ -148,9 +148,9 @@ pub fn from_mr_version(version: MRVersion) -> (Metadata, DownloadData) {
                     if d.dependency_type == MRDependencyType::Required {
                         match (d.project_id, d.version_id) {
                             (Some(proj_id), Some(ver_id)) => {
-                                Some(ModIdentifier::PinnedModrinthProject(proj_id, ver_id))
+                                Some(SourceId::PinnedModrinth(proj_id, ver_id))
                             }
-                            (Some(proj_id), None) => Some(ModIdentifier::ModrinthProject(proj_id)),
+                            (Some(proj_id), None) => Some(SourceId::Modrinth(proj_id)),
                             _ => {
                                 eprintln!("Project ID not available");
                                 None
@@ -168,9 +168,9 @@ pub fn from_mr_version(version: MRVersion) -> (Metadata, DownloadData) {
                     if d.dependency_type == MRDependencyType::Incompatible {
                         match (d.project_id, d.version_id) {
                             (Some(proj_id), Some(ver_id)) => {
-                                Some(ModIdentifier::PinnedModrinthProject(proj_id, ver_id))
+                                Some(SourceId::PinnedModrinth(proj_id, ver_id))
                             }
-                            (Some(proj_id), None) => Some(ModIdentifier::ModrinthProject(proj_id)),
+                            (Some(proj_id), None) => Some(SourceId::Modrinth(proj_id)),
                             _ => {
                                 eprintln!("Project ID not available");
                                 None

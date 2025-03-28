@@ -1,7 +1,5 @@
 use crate::{
-    config::structs::{
-        Filters, ModIdentifier, ModLoader, Profile, ReleaseChannel, Source, SourceId,
-    },
+    config::structs::{Filters, ModLoader, Profile, ReleaseChannel, Source, SourceId},
     iter_ext::IterExt as _,
     upgrade::{check, Metadata},
     CURSEFORGE_API, GITHUB_API, MODRINTH_API,
@@ -82,15 +80,15 @@ struct ReleaseAsset {
     name: String,
 }
 
-pub fn parse_id(id: String) -> ModIdentifier {
+pub fn parse_id(id: String) -> SourceId {
     if let Ok(id) = id.parse() {
-        ModIdentifier::CurseForgeProject(id)
+        SourceId::Curseforge(id)
     } else {
         let split = id.split('/').collect_vec();
         if split.len() == 2 {
-            ModIdentifier::GitHubRepository(split[0].to_owned(), split[1].to_owned())
+            SourceId::Github(split[0].to_owned(), split[1].to_owned())
         } else {
-            ModIdentifier::ModrinthProject(id)
+            SourceId::Modrinth(id)
         }
     }
 }
@@ -102,7 +100,7 @@ pub fn parse_id(id: String) -> ModIdentifier {
 /// Performs checks on the mods to see whether they're compatible with the profile if `perform_checks` is true
 pub async fn add(
     profile: &mut Profile,
-    identifiers: Vec<ModIdentifier>,
+    identifiers: Vec<SourceId>,
     perform_checks: bool,
     filters: Option<Filters>,
 ) -> Result<(Vec<String>, Vec<(String, Error)>)> {
@@ -113,9 +111,9 @@ pub async fn add(
 
     for id in identifiers {
         match id {
-            ModIdentifier::CurseForgeProject(id) => cf_ids.push(id),
-            ModIdentifier::ModrinthProject(id) => mr_ids.push(id),
-            ModIdentifier::GitHubRepository(o, r) => gh_ids.push((o, r)),
+            SourceId::Curseforge(id) => cf_ids.push(id),
+            SourceId::Modrinth(id) => mr_ids.push(id),
+            SourceId::Github(o, r) => gh_ids.push((o, r)),
 
             _ => todo!("Adding pinned projects is not supported yet"),
         }

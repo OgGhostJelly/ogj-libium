@@ -54,21 +54,6 @@ impl Source {
 
 impl SourceId {
     pub async fn fetch_download_file(&self, filters: Vec<&Filters>) -> Result<DownloadData> {
-        /* TODO: Add pinned sources
-        ModIdentifier::PinnedCurseForgeProject(mod_id, pin) => {
-            Ok(try_from_cf_file(CURSEFORGE_API.get_mod_file(*mod_id, *pin).await?)?.1)
-        }
-        ModIdentifier::PinnedModrinthProject(_, pin) => {
-            Ok(from_mr_version(MODRINTH_API.get_version(pin).await?).1)
-        }
-        ModIdentifier::PinnedGitHubRepository((owner, repo), pin) => Ok(from_gh_asset(
-            GITHUB_API
-                .repos(owner, repo)
-                .release_assets()
-                .get(*pin as u64)
-                .await?,
-        )), */
-
         let download_files = match self {
             SourceId::Curseforge(id) => {
                 let mut files = CURSEFORGE_API.get_mod_files(*id).await?;
@@ -91,6 +76,21 @@ impl SourceId {
                 .send()
                 .await
                 .map(|r| from_gh_releases(r.items))?,
+            _ => todo!(),
+            /* TODO: Add pinned sources
+            ModIdentifier::PinnedCurseForgeProject(mod_id, pin) => {
+                Ok(try_from_cf_file(CURSEFORGE_API.get_mod_file(*mod_id, *pin).await?)?.1)
+            }
+            ModIdentifier::PinnedModrinthProject(_, pin) => {
+                Ok(from_mr_version(MODRINTH_API.get_version(pin).await?).1)
+            }
+            ModIdentifier::PinnedGitHubRepository((owner, repo), pin) => Ok(from_gh_asset(
+                GITHUB_API
+                    .repos(owner, repo)
+                    .release_assets()
+                    .get(*pin as u64)
+                    .await?,
+            )), */
         };
 
         let index =
