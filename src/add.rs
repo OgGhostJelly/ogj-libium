@@ -294,14 +294,6 @@ pub async fn github(
     perform_checks: Option<Vec<Metadata>>,
     filters: Option<Filters>,
 ) -> Result<()> {
-    // Check if project has already been added
-    if profile_contains(
-        &profile.mods,
-        |source| matches!(source, SourceId::Github(owner, repo) if owner == id.0.as_ref() && repo == id.1.as_ref()),
-    ) {
-        return Err(Error::AlreadyAdded);
-    };
-
     if let Some(download_files) = perform_checks {
         // Check if the repo is compatible
         check::select_latest(
@@ -336,15 +328,8 @@ pub async fn modrinth(
     perform_checks: bool,
     filters: Option<Filters>,
 ) -> Result<()> {
-    // Check if project has already been added
-    if profile_contains(
-        &profile.mods,
-        |source| matches!(source, SourceId::Modrinth(id) if id == &project.id),
-    ) {
-        Err(Error::AlreadyAdded)
-
     // Check if the project is a mod
-    } else if project.project_type != ProjectType::Mod {
+    if project.project_type != ProjectType::Mod {
         Err(Error::NotAMod)
 
     // Check if the project is compatible
@@ -388,15 +373,8 @@ pub async fn curseforge(
     perform_checks: bool,
     filters: Option<Filters>,
 ) -> Result<()> {
-    // Check if project has already been added
-    if profile_contains(
-        &profile.mods,
-        |source| matches!(source, SourceId::Curseforge(id) if *id == project.id),
-    ) {
-        Err(Error::AlreadyAdded)
-
     // Check if it can be downloaded by third-parties
-    } else if Some(false) == project.allow_mod_distribution {
+    if Some(false) == project.allow_mod_distribution {
         Err(Error::DistributionDenied)
 
     // Check if the project is a Minecraft mod

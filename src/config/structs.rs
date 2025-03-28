@@ -2,7 +2,14 @@ use crate::add;
 
 use derive_more::derive::Display;
 use serde::{de::Visitor, Deserialize, Serialize};
-use std::{collections::HashMap, env::current_dir, fmt, fs::File, path::PathBuf, str::FromStr};
+use std::{
+    collections::{hash_map::Entry, HashMap},
+    env::current_dir,
+    fmt,
+    fs::File,
+    path::PathBuf,
+    str::FromStr,
+};
 
 #[derive(Deserialize, Serialize, Debug, Default, Clone)]
 pub struct Config {
@@ -113,10 +120,36 @@ impl Profile {
     }
 
     pub fn push_mod(&mut self, id: String, source: Source) -> Result<(), add::Error> {
-        if self.mods.contains_key(&id) {
-            return Err(add::Error::AlreadyAdded);
+        for source_id in source.ids() {
+            let has_duplicates = self.mod_ids().any(|mod_id| mod_id == source_id);
+            if has_duplicates {
+                return Err(add::Error::AlreadyAdded);
+            }
         }
-        self.mods.insert(id, source);
+
+        match self.mods.entry(id.clone()) {
+            Entry::Occupied(e) => {
+                let source = match e.remove() {
+                    e @ Source::Single(_) | e @ Source::Detailed { .. } => {
+                        Source::Multiple(vec![e, source])
+                    }
+                    Source::Multiple(mut sources) => {
+                        sources.push(source);
+                        Source::Multiple(sources)
+                    }
+                };
+
+                if self.mods.contains_key(&id) {
+                    return Err(add::Error::AlreadyAdded);
+                }
+
+                self.mods.insert(id.clone(), source);
+            }
+            Entry::Vacant(e) => {
+                let _ = e.insert(source);
+            }
+        }
+
         Ok(())
     }
 
