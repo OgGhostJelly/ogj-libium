@@ -5,6 +5,7 @@ use super::{
 use crate::{
     config::structs::{Filters, Source, SourceId},
     iter_ext::IterExt as _,
+    upgrade::from_gh_asset,
     CURSEFORGE_API, GITHUB_API, MODRINTH_API,
 };
 use std::cmp::Reverse;
@@ -76,21 +77,25 @@ impl SourceId {
                 .send()
                 .await
                 .map(|r| from_gh_releases(r.items))?,
-            _ => todo!(),
-            /* TODO: Add pinned sources
-            ModIdentifier::PinnedCurseForgeProject(mod_id, pin) => {
-                Ok(try_from_cf_file(CURSEFORGE_API.get_mod_file(*mod_id, *pin).await?)?.1)
+            SourceId::PinnedCurseforge(mod_id, pin) => {
+                let mod_file = CURSEFORGE_API.get_mod_file(*mod_id, *pin).await?;
+                let cf = try_from_cf_file(mod_file)?;
+                return Ok(cf.1);
             }
-            ModIdentifier::PinnedModrinthProject(_, pin) => {
-                Ok(from_mr_version(MODRINTH_API.get_version(pin).await?).1)
+            SourceId::PinnedModrinth(_, pin) => {
+                let mr_version = MODRINTH_API.get_version(pin).await?;
+                let mr = from_mr_version(mr_version);
+                return Ok(mr.1);
             }
-            ModIdentifier::PinnedGitHubRepository((owner, repo), pin) => Ok(from_gh_asset(
-                GITHUB_API
-                    .repos(owner, repo)
-                    .release_assets()
-                    .get(*pin as u64)
-                    .await?,
-            )), */
+            SourceId::PinnedGithub((owner, repo), pin) => {
+                return Ok(from_gh_asset(
+                    GITHUB_API
+                        .repos(owner, repo)
+                        .release_assets()
+                        .get(*pin as u64)
+                        .await?,
+                ))
+            }
         };
 
         let index =
