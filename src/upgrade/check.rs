@@ -52,7 +52,7 @@ impl Filters {
     ) -> Result<HashSet<usize>> {
         // Filter mod loader
         let download_files =
-            download_files.filter(|(_, f)| self.mod_loaders.iter().any(|l| f.loaders.contains(l)));
+            download_files.filter(|(_, f)| f.loaders.iter().any(|l| self.mod_loader_matches(l)));
 
         // Filter version
         let download_files =

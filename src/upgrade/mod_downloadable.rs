@@ -30,16 +30,10 @@ type Result<T> = std::result::Result<T, Error>;
 
 impl Source {
     pub async fn fetch_download_file(&self, filters: Vec<&Filters>) -> Result<DownloadData> {
-        let mut sources = vec![];
-        let _ = self.each_sources(filters, |filters, id| {
-            sources.push((filters, id));
-        });
-
         let mut download_files = vec![];
-        for (filters, id) in sources {
-            let fut = id.fetch_download_file(filters);
-            download_files.push(fut);
-        }
+        let _ = self.each_sources(filters, |filters, id| {
+            download_files.push(id.fetch_download_file(filters));
+        });
 
         for file in download_files {
             match file.await {

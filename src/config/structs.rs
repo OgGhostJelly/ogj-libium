@@ -249,7 +249,9 @@ impl SourceId {
             SourceId::Curseforge(id) => format!("cf:{id}"),
             SourceId::Modrinth(id) => format!("mr:{id}"),
             SourceId::Github(owner, repo) => format!("gh:{owner}/{repo}"),
-            _ => todo!(),
+            SourceId::PinnedCurseforge(id, pin) => format!("cf:{id}*{pin}"),
+            SourceId::PinnedModrinth(id, pin) => format!("mr:{id}*{pin}"),
+            SourceId::PinnedGithub((owner, repo), pin) => todo!("gh:{owner}/{repo}*{pin}"),
         }
     }
 }
@@ -294,23 +296,58 @@ impl<'de> Visitor<'de> for SourceTagVisitor {
         let (tag, id) = v.split_at(index);
         let id = &id[1..];
 
+        fn parse_with_pin<'inp, Id, Pin>(
+            inp: &'inp str,
+            f_id: impl Fn(&'inp str) -> Id,
+            f_pin: impl Fn(&'inp str) -> Pin,
+        ) -> (Id, Option<Pin>) {
+            match inp.rfind('*') {
+                Some(index) => {
+                    let (id, pin) = inp.split_at(index);
+                    (f_id(id), Some(f_pin(&pin[1..])))
+                }
+                None => (f_id(inp), None),
+            }
+        }
+
         match tag {
-            "cf" | "curseforge" => Ok(SourceId::Curseforge(match id.parse() {
-                Ok(value) => value,
-                Err(e) => return Err(E::custom(e)),
-            })),
-            "mr" | "modrinth" => Ok(SourceId::Modrinth(id.to_string())),
+            "cf" | "curseforge" => match parse_with_pin(id, |id| id.parse(), |pin| pin.parse()) {
+                (Ok(id), None) => Ok(SourceId::Curseforge(id)),
+                (Ok(id), Some(Ok(pin))) => Ok(SourceId::PinnedCurseforge(id, pin)),
+                (Err(e), _) | (_, Some(Err(e))) => return Err(E::custom(e)),
+            },
+            "mr" | "modrinth" => match parse_with_pin(id, |id| id, |pin| pin) {
+                (id, None) => Ok(SourceId::Modrinth(id.to_owned())),
+                (id, Some(pin)) => Ok(SourceId::PinnedModrinth(id.to_owned(), pin.to_owned())),
+            },
             "gh" | "github" => {
-                let Some(index) = id.find('/') else {
-                    return Err(E::custom(format!(
-                        "missing `/` separator in github source {tag}:{id}"
-                    )));
-                };
+                let parsed = parse_with_pin(
+                    id,
+                    |id| {
+                        let Some(index) = id.find('/') else {
+                            return Err(E::custom(format!(
+                                "missing `/` separator in github source {tag}:{id}"
+                            )));
+                        };
 
-                let (owner, repo) = id.split_at(index);
-                let repo = &repo[1..];
+                        let (owner, repo) = id.split_at(index);
+                        let repo = &repo[1..];
 
-                Ok(SourceId::Github(owner.into(), repo.into()))
+                        Ok((owner, repo))
+                    },
+                    |pin| pin.parse(),
+                );
+
+                match (parsed.0?, parsed.1) {
+                    ((owner, repo), None) => {
+                        Ok(SourceId::Github(owner.to_owned(), repo.to_owned()))
+                    }
+                    ((owner, repo), Some(Ok(pin))) => Ok(SourceId::PinnedGithub(
+                        (owner.to_owned(), repo.to_owned()),
+                        pin,
+                    )),
+                    (_, Some(Err(e))) => Err(E::custom(e)),
+                }
             }
             _ => Err(E::unknown_variant(
                 tag,
@@ -351,22 +388,26 @@ impl<'a> Iterator for SourceIdsIter<'a> {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Filters {
-    #[serde(default, alias = "version", with = "serde_version")]
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, alias = "version", with = "ListOrSingle")]
     pub versions: Vec<Version>,
-    #[serde(default)]
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, alias = "mod_loader", with = "ListOrSingle")]
     pub mod_loaders: Vec<ModLoader>,
 }
 
-mod serde_version {
-    use serde::{Deserialize, Serialize};
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum ListOrSingle<T> {
+    Single(T),
+    Multiple(Vec<T>),
+}
 
-    use super::Version;
-
-    type T = Vec<Version>;
-
-    pub fn serialize<S>(data: &T, serializer: S) -> Result<S::Ok, S::Error>
+impl<T> ListOrSingle<T> {
+    pub fn serialize<S>(data: &Vec<T>, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
+        T: serde::Serialize,
     {
         if data.len() == 1 {
             data[0].serialize(serializer)
@@ -375,20 +416,14 @@ mod serde_version {
         }
     }
 
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<T, D::Error>
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Vec<T>, D::Error>
     where
         D: serde::Deserializer<'de>,
+        T: serde::Deserialize<'de>,
     {
-        #[derive(Deserialize)]
-        #[serde(untagged)]
-        enum VersionList {
-            Single(Version),
-            Multiple(Vec<Version>),
-        }
-
-        match VersionList::deserialize(deserializer)? {
-            VersionList::Single(version) => Ok(vec![version]),
-            VersionList::Multiple(versions) => Ok(versions),
+        match <Self as serde::Deserialize>::deserialize(deserializer)? {
+            ListOrSingle::Single(item) => Ok(vec![item]),
+            ListOrSingle::Multiple(items) => Ok(items),
         }
     }
 }
@@ -406,10 +441,18 @@ impl Filters {
     }
 
     pub fn mod_loader_matches(&self, mod_loader: &ModLoader) -> bool {
+        if self.mod_loaders.is_empty() {
+            return true;
+        }
+
         self.mod_loaders.iter().any(|p| p == mod_loader)
     }
 
     pub fn version_matches(&self, version: &str) -> bool {
+        if self.versions.is_empty() {
+            return true;
+        }
+
         self.versions.iter().any(|p| p.matches(version))
     }
 }
@@ -479,7 +522,9 @@ impl<'de> Visitor<'de> for VersionVisitor {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug, Display, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+#[derive(
+    Deserialize, Serialize, Debug, Display, Clone, Copy, PartialEq, Eq, clap::ValueEnum, Hash,
+)]
 pub enum ModLoader {
     Quilt,
     Fabric,
