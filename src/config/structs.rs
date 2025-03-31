@@ -1,6 +1,7 @@
 use crate::add;
 
 use derive_more::derive::Display;
+use semver::Prerelease;
 use serde::{de::Visitor, Deserialize, Serialize};
 use std::{
     collections::{hash_map::Entry, HashMap},
@@ -101,15 +102,15 @@ pub struct Profile {
 
 impl Profile {
     /// A simple contructor that automatically deals with converting to filters
-    pub fn new(versions: Vec<Version>, mod_loader: ModLoader) -> Self {
+    pub fn new(versions: Option<Vec<Version>>, mod_loader: ModLoader) -> Self {
         Self {
             filters: Filters {
                 versions,
                 mod_loaders: match mod_loader {
                     ModLoader::Fabric | ModLoader::Quilt => {
-                        vec![ModLoader::Fabric, ModLoader::Quilt]
+                        Some(vec![ModLoader::Fabric, ModLoader::Quilt])
                     }
-                    mod_loader => vec![mod_loader],
+                    mod_loader => Some(vec![mod_loader]),
                 },
             },
             mods: HashMap::new(),
@@ -388,51 +389,61 @@ impl<'a> Iterator for SourceIdsIter<'a> {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Filters {
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    #[serde(default, alias = "version", with = "ListOrSingle")]
-    pub versions: Vec<Version>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    #[serde(default, alias = "mod_loader", with = "ListOrSingle")]
-    pub mod_loaders: Vec<ModLoader>,
+    #[serde(default, alias = "version", with = "MaybeListOrSingle")]
+    pub versions: Option<Vec<Version>>,
+    #[serde(default, alias = "mod_loader", with = "MaybeListOrSingle")]
+    pub mod_loaders: Option<Vec<ModLoader>>,
 }
 
 #[derive(Deserialize)]
 #[serde(untagged)]
-enum ListOrSingle<T> {
+enum MaybeListOrSingle<T> {
     Single(T),
     Multiple(Vec<T>),
 }
 
-impl<T> ListOrSingle<T> {
-    pub fn serialize<S>(data: &Vec<T>, serializer: S) -> Result<S::Ok, S::Error>
+impl<T> MaybeListOrSingle<T> {
+    pub fn serialize<S>(data: &Option<Vec<T>>, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
         T: serde::Serialize,
     {
-        if data.len() == 1 {
-            data[0].serialize(serializer)
-        } else {
-            data.serialize(serializer)
+        match data {
+            Some(data) => {
+                if data.len() == 1 {
+                    data[0].serialize(serializer)
+                } else {
+                    data.serialize(serializer)
+                }
+            }
+            None => data.serialize(serializer),
         }
     }
 
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<Vec<T>, D::Error>
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<Vec<T>>, D::Error>
     where
         D: serde::Deserializer<'de>,
         T: serde::Deserialize<'de>,
     {
         match <Self as serde::Deserialize>::deserialize(deserializer)? {
-            ListOrSingle::Single(item) => Ok(vec![item]),
-            ListOrSingle::Multiple(items) => Ok(items),
+            MaybeListOrSingle::Single(item) => Ok(Some(vec![item])),
+            MaybeListOrSingle::Multiple(items) => Ok(Some(items)),
         }
     }
 }
 
 impl Filters {
     pub fn concat(self, other: Filters) -> Filters {
+        fn concat_opts<T: Clone>(a: Option<Vec<T>>, b: Option<Vec<T>>) -> Option<Vec<T>> {
+            match (a, b) {
+                (None, None) => None,
+                (a, b) => Some([a.unwrap_or(vec![]), b.unwrap_or(vec![])].concat()),
+            }
+        }
+
         Filters {
-            versions: [self.versions, other.versions].concat(),
-            mod_loaders: [self.mod_loaders, other.mod_loaders].concat(),
+            versions: concat_opts(self.versions, other.versions),
+            mod_loaders: concat_opts(self.mod_loaders, other.mod_loaders),
         }
     }
 
@@ -441,46 +452,92 @@ impl Filters {
     }
 
     pub fn mod_loader_matches(&self, mod_loader: &ModLoader) -> bool {
-        if self.mod_loaders.is_empty() {
+        let Some(mod_loaders) = &self.mod_loaders else {
             return true;
-        }
+        };
 
-        self.mod_loaders.iter().any(|p| p == mod_loader)
+        mod_loaders.iter().any(|p| p == mod_loader)
     }
 
     pub fn version_matches(&self, version: &str) -> bool {
-        if self.versions.is_empty() {
+        let Some(versions) = &self.versions else {
             return true;
-        }
+        };
 
-        self.versions.iter().any(|p| p.matches(version))
+        versions.iter().any(|p| p.matches(version))
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct Version(glob::Pattern);
+pub struct Version(semver::VersionReq);
 
 impl Version {
     pub fn matches(&self, s: &str) -> bool {
-        self.0.matches(s)
-    }
+        let (rest, tag) = match s.find('-') {
+            Some(index) => s.split_at(index),
+            None => (s, ""),
+        };
 
-    pub fn as_str(&self) -> &str {
-        self.0.as_str()
+        let tag = if tag.is_empty() {
+            None
+        } else {
+            Prerelease::new(&tag[1..])
+                .inspect_err(|e| println!("WARN: semver tag parse error: {e}"))
+                .ok()
+        };
+
+        fn find_split(s: &str) -> (&str, &str) {
+            match s.find('.') {
+                Some(index) => {
+                    let (s, rest) = s.split_at(index);
+                    (s, &rest[1..])
+                }
+                None => (s, ""),
+            }
+        }
+
+        let (major, rest) = find_split(rest);
+        let (minor, rest) = find_split(rest);
+        let (patch, rest) = find_split(rest);
+
+        if !rest.is_empty() {
+            println!("WARN: semver parse error: unexpected eof, discarded data ({rest:?})");
+        }
+
+        fn parse_part(s: &str) -> u64 {
+            if s.is_empty() {
+                return 0;
+            }
+            s.parse().ok().unwrap_or(0)
+        }
+
+        let major = parse_part(major);
+        let minor = parse_part(minor);
+        let patch = parse_part(patch);
+
+        let version = {
+            let mut version = semver::Version::new(major, minor, patch);
+            if let Some(tag) = tag {
+                version.pre = tag;
+            };
+            version
+        };
+
+        self.0.matches(&version)
     }
 }
 
 impl fmt::Display for Version {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0.as_str())
+        write!(f, "{}", self.0.to_string())
     }
 }
 
 impl FromStr for Version {
-    type Err = glob::PatternError;
+    type Err = semver::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self(glob::Pattern::new(s)?))
+        Ok(Self(semver::VersionReq::parse(s)?))
     }
 }
 
@@ -489,7 +546,7 @@ impl Serialize for Version {
     where
         S: serde::Serializer,
     {
-        serializer.serialize_str(self.0.as_str())
+        serializer.serialize_str(&self.0.to_string())
     }
 }
 

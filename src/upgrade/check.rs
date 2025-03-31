@@ -7,7 +7,7 @@ use std::{collections::HashSet, sync::OnceLock};
 #[error(transparent)]
 pub enum Error {
     VersionGrouping(#[from] ferinth::Error),
-    FilenameGlob(#[from] glob::GlobError),
+    FilenameGlob(#[from] regex::Error),
     #[error("The following filter(s) were empty: {}", _0.iter().display(", "))]
     FilterEmpty(Vec<String>),
     #[error("Failed to find a compatible combination")]
