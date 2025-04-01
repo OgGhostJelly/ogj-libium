@@ -102,7 +102,7 @@ pub async fn add(
     profile: &mut Profile,
     identifiers: Vec<SourceId>,
     perform_checks: bool,
-    filters: Option<Filters>,
+    filters: Filters,
 ) -> Result<(Vec<String>, Vec<(String, Error)>)> {
     let mut mr_ids = Vec::new();
     let mut cf_ids = Vec::new();
@@ -292,16 +292,13 @@ pub async fn github(
     id: &(impl AsRef<str> + ToString, impl AsRef<str> + ToString),
     profile: &mut Profile,
     perform_checks: Option<Vec<Metadata>>,
-    filters: Option<Filters>,
+    filters: Filters,
 ) -> Result<()> {
     if let Some(download_files) = perform_checks {
         // Check if the repo is compatible
         check::select_latest(
             download_files.iter(),
-            match &filters {
-                Some(filters) => vec![&profile.filters, &filters],
-                None => vec![&profile.filters],
-            },
+            vec![&profile.filters, &filters],
         )
         .await?;
     }
@@ -326,7 +323,7 @@ pub async fn modrinth(
     project: &Project,
     profile: &mut Profile,
     perform_checks: bool,
-    filters: Option<Filters>,
+    filters: Filters,
 ) -> Result<()> {
     // Check if the project is a mod
     if project.project_type != ProjectType::Mod {
@@ -349,10 +346,7 @@ pub async fn modrinth(
                     channel: ReleaseChannel::Release,
                 }]
                 .iter(),
-                match &filters {
-                    Some(filters) => vec![&profile.filters, &filters],
-                    None => vec![&profile.filters],
-                },
+                vec![&profile.filters, &filters],
             )
             .await?;
         }
@@ -371,7 +365,7 @@ pub async fn curseforge(
     project: &furse::structures::mod_structs::Mod,
     profile: &mut Profile,
     perform_checks: bool,
-    filters: Option<Filters>,
+    filters: Filters,
 ) -> Result<()> {
     // Check if it can be downloaded by third-parties
     if Some(false) == project.allow_mod_distribution {
@@ -406,10 +400,7 @@ pub async fn curseforge(
                     channel: ReleaseChannel::Release,
                 }]
                 .iter(),
-                match &filters {
-                    Some(filters) => vec![&profile.filters, &filters],
-                    None => vec![&profile.filters],
-                },
+                vec![&profile.filters, &filters],
             )
             .await?;
         }

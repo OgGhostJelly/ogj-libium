@@ -208,27 +208,28 @@ impl Source {
         f
     }
 
-    pub fn github(owner: String, repo: String, filters: Option<Filters>) -> Self {
+    pub fn github(owner: String, repo: String, filters: Filters) -> Self {
         Self::from_id(SourceId::Github(owner, repo), filters)
     }
 
-    pub fn curseforge(id: i32, filters: Option<Filters>) -> Self {
+    pub fn curseforge(id: i32, filters: Filters) -> Self {
         Self::from_id(SourceId::Curseforge(id), filters)
     }
 
-    pub fn modrinth(id: String, filters: Option<Filters>) -> Self {
+    pub fn modrinth(id: String, filters: Filters) -> Self {
         Self::from_id(SourceId::Modrinth(id), filters)
     }
 
-    pub fn from_id(source_id: SourceId, filters: Option<Filters>) -> Self {
+    pub fn from_id(source_id: SourceId, filters: Filters) -> Self {
         let source = Self::Single(source_id);
 
-        match filters {
-            Some(filters) => Self::Detailed {
+        if filters.is_empty() {
+            source
+        } else {
+            Self::Detailed {
                 filters,
                 src: Box::new(source),
-            },
-            None => source,
+            }
         }
     }
 }
@@ -433,6 +434,13 @@ impl<T> MaybeListOrSingle<T> {
 }
 
 impl Filters {
+    pub fn empty() -> Filters {
+        Filters {
+            versions: None,
+            mod_loaders: None,
+        }
+    }
+
     pub fn concat(self, other: Filters) -> Filters {
         fn concat_opts<T: Clone>(a: Option<Vec<T>>, b: Option<Vec<T>>) -> Option<Vec<T>> {
             match (a, b) {
@@ -465,6 +473,10 @@ impl Filters {
         };
 
         versions.iter().any(|p| p.matches(version))
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.mod_loaders.is_none() && self.versions.is_none()
     }
 }
 
