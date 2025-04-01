@@ -51,12 +51,15 @@ impl Filters {
         download_files: impl Iterator<Item = (usize, &Metadata)> + Clone,
     ) -> Result<HashSet<usize>> {
         // Filter mod loader
-        let download_files =
-            download_files.filter(|(_, f)| f.loaders.iter().any(|l| self.mod_loader_matches(l)));
+        let download_files = download_files.filter(|(_, f)| {
+            f.loaders.is_empty() || f.loaders.iter().any(|l| self.mod_loader_matches(l))
+        });
 
         // Filter game version
-        let download_files = download_files
-            .filter(|(_, f)| f.game_versions.iter().any(|v| self.game_version_matches(v)));
+        let download_files = download_files.filter(|(_, f)| {
+            f.game_versions.is_empty()
+                || f.game_versions.iter().any(|v| self.game_version_matches(v))
+        });
 
         // Filter release channel
         let download_files =

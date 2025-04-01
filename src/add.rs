@@ -23,6 +23,8 @@ pub enum Error {
     DoesNotExist,
     #[error("The project is not a mod")]
     NotAMod,
+    #[error("The project type '{0}' is not supported")]
+    UnsupportedProjectType(String),
     #[error("GitHub: {0}")]
     GitHubError(String),
     #[error("GitHub: {0:#?}")]
@@ -321,37 +323,37 @@ pub async fn modrinth(
     perform_checks: bool,
     filters: Filters,
 ) -> Result<()> {
-    // Check if the project is a mod
-    if project.project_type != ProjectType::Mod {
-        Err(Error::NotAMod)
-
     // Check if the project is compatible
-    } else {
-        if perform_checks {
-            check::select_latest(
-                [Metadata {
-                    filename: "".to_owned(),
-                    title: "".to_owned(),
-                    description: "".to_owned(),
-                    game_versions: project.game_versions.clone(),
-                    loaders: project
-                        .loaders
-                        .iter()
-                        .filter_map(|s| ModLoader::from_str(s).ok())
-                        .collect_vec(),
-                    channel: ReleaseChannel::Release,
-                }]
-                .iter(),
-                vec![&profile.filters, &filters],
-            )
-            .await?;
-        }
-        // Add it to the profile
-        profile.push_mod(
-            project.slug.clone(),
-            Source::modrinth(project.id.clone(), filters),
-        )?;
-        Ok(())
+    if perform_checks {
+        check::select_latest(
+            [Metadata {
+                filename: "".to_owned(),
+                title: "".to_owned(),
+                description: "".to_owned(),
+                game_versions: project.game_versions.clone(),
+                loaders: project
+                    .loaders
+                    .iter()
+                    .filter_map(|s| ModLoader::from_str(s).ok())
+                    .collect_vec(),
+                channel: ReleaseChannel::Release,
+            }]
+            .iter(),
+            vec![&profile.filters, &filters],
+        )
+        .await?;
+    }
+
+    let id = project.slug.clone();
+    let source = Source::modrinth(project.id.clone(), filters);
+
+    // Add it to the profile
+    match &project.project_type {
+        ProjectType::Mod => profile.push_mod(id, source),
+        ProjectType::Shader => profile.push_shader(id, source),
+        ProjectType::Modpack => profile.push_modpack(id, source),
+        ProjectType::ResourcePack => profile.push_resourcepack(id, source),
+        ty => Err(Error::UnsupportedProjectType(format!("{ty:?}"))),
     }
 }
 

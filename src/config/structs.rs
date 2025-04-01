@@ -91,13 +91,13 @@ pub enum ModpackIdentifier {
 pub struct Profile {
     #[serde(flatten)]
     pub filters: Filters,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub mods: HashMap<String, Source>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub shaders: HashMap<String, Source>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub modpacks: HashMap<String, Source>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub resourcepacks: HashMap<String, Source>,
 }
 
@@ -123,14 +123,38 @@ impl Profile {
     }
 
     pub fn push_mod(&mut self, id: String, source: Source) -> Result<(), add::Error> {
+        Self::push_map(&mut self.mods, id, source)
+    }
+
+    pub fn push_shader(&mut self, id: String, source: Source) -> Result<(), add::Error> {
+        println!("{id} {source:?}");
+        Self::push_map(&mut self.shaders, id, source)
+    }
+
+    pub fn push_modpack(&mut self, id: String, source: Source) -> Result<(), add::Error> {
+        Self::push_map(&mut self.modpacks, id, source)
+    }
+
+    pub fn push_resourcepack(&mut self, id: String, source: Source) -> Result<(), add::Error> {
+        Self::push_map(&mut self.resourcepacks, id, source)
+    }
+
+    pub fn push_map(
+        map: &mut HashMap<String, Source>,
+        id: String,
+        source: Source,
+    ) -> Result<(), add::Error> {
         for source_id in source.ids() {
-            let has_duplicates = self.mod_ids().any(|mod_id| mod_id == source_id);
+            let has_duplicates = map
+                .iter()
+                .flat_map(|(_, source)| source.ids())
+                .any(|mod_id| mod_id == source_id);
             if has_duplicates {
                 return Err(add::Error::AlreadyAdded);
             }
         }
 
-        match self.mods.entry(id.clone()) {
+        match map.entry(id.clone()) {
             Entry::Occupied(e) => {
                 let source = match e.remove() {
                     e @ Source::Single(_) | e @ Source::Detailed { .. } => {
@@ -142,11 +166,11 @@ impl Profile {
                     }
                 };
 
-                if self.mods.contains_key(&id) {
+                if map.contains_key(&id) {
                     return Err(add::Error::AlreadyAdded);
                 }
 
-                self.mods.insert(id.clone(), source);
+                map.insert(id.clone(), source);
             }
             Entry::Vacant(e) => {
                 let _ = e.insert(source);
@@ -396,10 +420,13 @@ pub struct Filters {
     pub game_versions: Option<Vec<Version>>,
     #[serde(default, alias = "mod_loader", with = "MaybeListOrSingle")]
     pub mod_loaders: Option<Vec<ModLoader>>,
-
+    #[serde(default, alias = "release_channel")]
     pub release_channels: Option<Vec<ReleaseChannel>>,
+    #[serde(default)]
     pub filename: Option<Regex>,
+    #[serde(default)]
     pub title: Option<Regex>,
+    #[serde(default)]
     pub description: Option<Regex>,
 }
 
@@ -581,8 +608,14 @@ where
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Regex(regex::Regex);
+
+impl fmt::Debug for Regex {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("Regex").field(&self.0.to_string()).finish()
+    }
+}
 
 impl fmt::Display for Regex {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -600,8 +633,14 @@ impl FromStr for Regex {
 
 impl_serde_for_parse!(Regex);
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Version(semver::VersionReq);
+
+impl fmt::Debug for Version {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("Version").field(&self.0.to_string()).finish()
+    }
+}
 
 impl Version {
     pub fn matches(&self, s: &str) -> bool {
