@@ -51,7 +51,7 @@ impl ProfileItem {
             Some(path) => path,
             None => {
                 let mut path = current_dir()?.join(&name);
-                path.set_extension("json");
+                path.set_extension("toml");
                 path
             }
         };
