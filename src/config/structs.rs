@@ -39,14 +39,20 @@ pub struct ProfileItem {
     /// The unique name of the profile.
     pub name: String,
     /// The directory to download mod files to
-    pub output_dir: PathBuf,
+    pub mods_dir: PathBuf,
+    /// The directory to download mod files to
+    pub shaderpacks_dir: PathBuf,
+    /// The directory to download mod files to
+    pub resourcepacks_dir: PathBuf,
 }
 
 impl ProfileItem {
     pub fn infer_path(
         path: Option<PathBuf>,
         name: String,
-        output_dir: PathBuf,
+        mods_dir: PathBuf,
+        resourcepacks_dir: PathBuf,
+        shaderpacks_dir: PathBuf,
     ) -> std::io::Result<Self> {
         let path = match path {
             Some(path) => path,
@@ -64,7 +70,9 @@ impl ProfileItem {
         Ok(Self {
             path,
             name,
-            output_dir,
+            mods_dir,
+            shaderpacks_dir,
+            resourcepacks_dir,
         })
     }
 }
