@@ -54,9 +54,23 @@ impl Filters {
         let download_files =
             download_files.filter(|(_, f)| f.loaders.iter().any(|l| self.mod_loader_matches(l)));
 
-        // Filter version
+        // Filter game version
+        let download_files = download_files
+            .filter(|(_, f)| f.game_versions.iter().any(|v| self.game_version_matches(v)));
+
+        // Filter release channel
         let download_files =
-            download_files.filter(|(_, f)| f.game_versions.iter().any(|v| self.version_matches(v)));
+            download_files.filter(|(_, f)| self.release_channel_matches(&f.channel));
+
+        // Filter filename
+        let download_files = download_files.filter(|(_, f)| self.filename_matches(&f.filename));
+
+        // Filter title
+        let download_files = download_files.filter(|(_, f)| self.title_matches(&f.title));
+
+        // Filter description
+        let download_files =
+            download_files.filter(|(_, f)| self.description_matches(&f.description));
 
         Ok(download_files.map(|(i, _)| i).collect_hashset())
     }

@@ -296,11 +296,7 @@ pub async fn github(
 ) -> Result<()> {
     if let Some(download_files) = perform_checks {
         // Check if the repo is compatible
-        check::select_latest(
-            download_files.iter(),
-            vec![&profile.filters, &filters],
-        )
-        .await?;
+        check::select_latest(download_files.iter(), vec![&profile.filters, &filters]).await?;
     }
 
     let repo = id.0.as_ref().trim();

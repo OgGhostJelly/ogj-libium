@@ -8,6 +8,7 @@ use std::{
     env::current_dir,
     fmt,
     fs::File,
+    marker::PhantomData,
     path::PathBuf,
     str::FromStr,
 };
@@ -102,16 +103,17 @@ pub struct Profile {
 
 impl Profile {
     /// A simple contructor that automatically deals with converting to filters
-    pub fn new(versions: Option<Vec<Version>>, mod_loader: ModLoader) -> Self {
+    pub fn new(game_versions: Option<Vec<Version>>, mod_loader: ModLoader) -> Self {
         Self {
             filters: Filters {
-                versions,
+                game_versions,
                 mod_loaders: match mod_loader {
                     ModLoader::Fabric | ModLoader::Quilt => {
                         Some(vec![ModLoader::Fabric, ModLoader::Quilt])
                     }
                     mod_loader => Some(vec![mod_loader]),
                 },
+                ..Filters::empty()
             },
             mods: HashMap::new(),
             shaders: HashMap::new(),
@@ -391,9 +393,14 @@ impl<'a> Iterator for SourceIdsIter<'a> {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Filters {
     #[serde(default, alias = "version", with = "MaybeListOrSingle")]
-    pub versions: Option<Vec<Version>>,
+    pub game_versions: Option<Vec<Version>>,
     #[serde(default, alias = "mod_loader", with = "MaybeListOrSingle")]
     pub mod_loaders: Option<Vec<ModLoader>>,
+
+    pub release_channels: Option<Vec<ReleaseChannel>>,
+    pub filename: Option<Regex>,
+    pub title: Option<Regex>,
+    pub description: Option<Regex>,
 }
 
 #[derive(Deserialize)]
@@ -436,8 +443,12 @@ impl<T> MaybeListOrSingle<T> {
 impl Filters {
     pub fn empty() -> Filters {
         Filters {
-            versions: None,
+            game_versions: None,
             mod_loaders: None,
+            release_channels: None,
+            filename: None,
+            title: None,
+            description: None,
         }
     }
 
@@ -449,14 +460,58 @@ impl Filters {
             }
         }
 
+        fn concat_regex(a: Option<Regex>, b: Option<Regex>) -> Option<Regex> {
+            match (a, b) {
+                (None, None) => None,
+                (pat, None) | (None, pat) => pat,
+                (Some(a), Some(b)) => Some(
+                    format!("{}|{}", a.0, b.0)
+                        .parse()
+                        .expect("Joining regex expr with OR should always be a valid pattern"),
+                ),
+            }
+        }
+
         Filters {
-            versions: concat_opts(self.versions, other.versions),
+            game_versions: concat_opts(self.game_versions, other.game_versions),
             mod_loaders: concat_opts(self.mod_loaders, other.mod_loaders),
+            release_channels: concat_opts(self.release_channels, other.release_channels),
+            filename: concat_regex(self.filename, other.filename),
+            title: concat_regex(self.title, other.title),
+            description: concat_regex(self.description, other.description),
         }
     }
 
-    pub fn matches(&self, version: &str, mod_loader: &ModLoader) -> bool {
-        self.version_matches(version) && self.mod_loader_matches(mod_loader)
+    pub fn release_channel_matches(&self, release_channel: &ReleaseChannel) -> bool {
+        let Some(release_channels) = &self.release_channels else {
+            return true;
+        };
+
+        release_channels.iter().any(|c| c == release_channel)
+    }
+
+    pub fn filename_matches(&self, filename: &str) -> bool {
+        let Some(filename_pat) = &self.filename else {
+            return true;
+        };
+
+        filename_pat.0.is_match(filename)
+    }
+
+    pub fn title_matches(&self, title: &str) -> bool {
+        let Some(title_pat) = &self.title else {
+            return true;
+        };
+
+        title_pat.0.is_match(title)
+    }
+
+    pub fn description_matches(&self, description: &str) -> bool {
+        let Some(description_pat) = &self.description else {
+            return true;
+        };
+
+        description_pat.0.is_match(description)
     }
 
     pub fn mod_loader_matches(&self, mod_loader: &ModLoader) -> bool {
@@ -467,8 +522,8 @@ impl Filters {
         mod_loaders.iter().any(|p| p == mod_loader)
     }
 
-    pub fn version_matches(&self, version: &str) -> bool {
-        let Some(versions) = &self.versions else {
+    pub fn game_version_matches(&self, version: &str) -> bool {
+        let Some(versions) = &self.game_versions else {
             return true;
         };
 
@@ -476,9 +531,74 @@ impl Filters {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.mod_loaders.is_none() && self.versions.is_none()
+        self.mod_loaders.is_none() && self.game_versions.is_none()
     }
 }
+
+macro_rules! impl_serde_for_parse {
+    ($t:ty) => {
+        impl Serialize for $t {
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer,
+            {
+                serializer.serialize_str(&self.0.to_string())
+            }
+        }
+
+        impl<'de> Deserialize<'de> for $t {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: serde::Deserializer<'de>,
+            {
+                deserializer.deserialize_str(ParseVisitor::<Self>(PhantomData))
+            }
+        }
+    };
+}
+
+struct ParseVisitor<T>(PhantomData<T>);
+
+impl<'de, T> Visitor<'de> for ParseVisitor<T>
+where
+    T: FromStr,
+    <T as FromStr>::Err: std::fmt::Display,
+{
+    type Value = T;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        write!(formatter, "a unix-style glob pattern")
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        match v.parse() {
+            Ok(value) => Ok(value),
+            Err(e) => Err(E::custom(e)),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Regex(regex::Regex);
+
+impl fmt::Display for Regex {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0.to_string())
+    }
+}
+
+impl FromStr for Regex {
+    type Err = regex::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self(regex::Regex::new(s)?))
+    }
+}
+
+impl_serde_for_parse!(Regex);
 
 #[derive(Debug, Clone)]
 pub struct Version(semver::VersionReq);
@@ -553,43 +673,7 @@ impl FromStr for Version {
     }
 }
 
-impl Serialize for Version {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_str(&self.0.to_string())
-    }
-}
-
-impl<'de> Deserialize<'de> for Version {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        deserializer.deserialize_str(VersionVisitor)
-    }
-}
-
-struct VersionVisitor;
-
-impl<'de> Visitor<'de> for VersionVisitor {
-    type Value = Version;
-
-    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        write!(formatter, "a unix-style glob pattern")
-    }
-
-    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-    where
-        E: serde::de::Error,
-    {
-        match v.parse() {
-            Ok(value) => Ok(value),
-            Err(e) => Err(E::custom(e)),
-        }
-    }
-}
+impl_serde_for_parse!(Version);
 
 #[derive(
     Deserialize, Serialize, Debug, Display, Clone, Copy, PartialEq, Eq, clap::ValueEnum, Hash,
