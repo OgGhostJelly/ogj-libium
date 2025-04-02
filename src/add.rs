@@ -315,7 +315,7 @@ pub async fn github(
 
 use ferinth::structures::project::{Project, ProjectType};
 
-/// Check if the project of `project_id` has not already been added, is a mod, and is compatible with `profile`.
+/// Check if the project of `project_id` has not already been added and is compatible with `profile`.
 /// If so, add it to the `profile`.
 pub async fn modrinth(
     project: &Project,

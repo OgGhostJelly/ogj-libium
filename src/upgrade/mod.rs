@@ -3,13 +3,14 @@ pub mod mod_downloadable;
 pub mod modpack_downloadable;
 
 use crate::{
-    config::structs::{ModLoader, ReleaseChannel, SourceId},
+    config::structs::{ModLoader, ReleaseChannel, SourceId, SourceKind},
     iter_ext::IterExt as _,
     modpack::modrinth::structs::ModpackFile as ModpackModFile,
     version_ext::VersionExt,
 };
-use ferinth::structures::version::{
-    DependencyType as MRDependencyType, Version as MRVersion, VersionType,
+use ferinth::structures::{
+    project::ProjectType,
+    version::{DependencyType as MRDependencyType, Version as MRVersion, VersionType},
 };
 use furse::structures::file_structs::{
     File as CFFile, FileRelationType as CFFileRelationType, FileReleaseType,
@@ -58,6 +59,8 @@ pub struct DownloadData {
     pub dependencies: Vec<SourceId>,
     /// Other mods this file is incompatible with
     pub conflicts: Vec<SourceId>,
+    /// The kind of source file, `None` if the kind is unknown.
+    pub kind: Option<SourceKind>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -67,6 +70,7 @@ pub struct DistributionDeniedError(pub i32, pub i32);
 
 pub fn try_from_cf_file(
     file: CFFile,
+    class_id: Option<usize>,
 ) -> std::result::Result<(Metadata, DownloadData), DistributionDeniedError> {
     Ok((
         Metadata {
@@ -113,11 +117,20 @@ pub fn try_from_cf_file(
                     }
                 })
                 .collect_vec(),
+            kind: class_id.and_then(|class_id| match class_id {
+                12 => Some(SourceKind::Resourcepacks),
+                6 => Some(SourceKind::Mods),
+                6552 => Some(SourceKind::Shaders),
+                _ => None,
+            }),
         },
     ))
 }
 
-pub fn from_mr_version(version: MRVersion) -> (Metadata, DownloadData) {
+pub fn from_mr_version(
+    version: MRVersion,
+    project_type: Option<ProjectType>,
+) -> (Metadata, DownloadData) {
     (
         Metadata {
             title: version.name.clone(),
@@ -181,6 +194,12 @@ pub fn from_mr_version(version: MRVersion) -> (Metadata, DownloadData) {
                     }
                 })
                 .collect_vec(),
+            kind: project_type.and_then(|project_type| match project_type {
+                ProjectType::Mod => Some(SourceKind::Mods),
+                ProjectType::Shader => Some(SourceKind::Shaders),
+                ProjectType::ResourcePack => Some(SourceKind::Resourcepacks),
+                _ => None,
+            }),
         },
     )
 }
@@ -196,6 +215,7 @@ pub fn from_modpack_file(file: ModpackModFile) -> DownloadData {
         length: file.file_size,
         dependencies: Vec::new(),
         conflicts: Vec::new(),
+        kind: None,
     }
 }
 
@@ -236,6 +256,7 @@ pub fn from_gh_releases(
                         length: asset.size as usize,
                         dependencies: Vec::new(),
                         conflicts: Vec::new(),
+                        kind: None,
                     },
                 )
             })
@@ -250,6 +271,7 @@ pub fn from_gh_asset(asset: GHAsset) -> DownloadData {
         length: asset.size as usize,
         dependencies: Vec::new(),
         conflicts: Vec::new(),
+        kind: None,
     }
 }
 

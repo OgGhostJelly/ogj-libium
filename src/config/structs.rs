@@ -422,6 +422,13 @@ impl<'a> Iterator for SourceIdsIter<'a> {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum SourceKind {
+    Mods,
+    Resourcepacks,
+    Shaders,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Filters {
     #[serde(default, alias = "version", with = "MaybeListOrSingle")]

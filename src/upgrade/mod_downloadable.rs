@@ -1,3 +1,5 @@
+use futures_util::future::{join, join_all};
+
 use super::{
     check, from_gh_releases, from_mr_version, try_from_cf_file, DistributionDeniedError,
     DownloadData,
@@ -35,8 +37,8 @@ impl Source {
             download_files.push(id.fetch_download_file(filters));
         });
 
-        for file in download_files {
-            match file.await {
+        for file in join_all(download_files).await {
+            match file {
                 Ok(data) => return Ok(data),
                 Err(Error::CheckError(check::Error::IntersectFailure)) => {}
                 Err(e) => return Err(e),
@@ -51,19 +53,29 @@ impl SourceId {
     pub async fn fetch_download_file(&self, filters: Vec<&Filters>) -> Result<DownloadData> {
         let download_files = match self {
             SourceId::Curseforge(id) => {
-                let mut files = CURSEFORGE_API.get_mod_files(*id).await?;
+                let (files, mod_) = join(
+                    CURSEFORGE_API.get_mod_files(*id),
+                    CURSEFORGE_API.get_mod(*id),
+                )
+                .await;
+                let (mut files, mod_) = (files?, mod_?);
+
                 files.sort_unstable_by_key(|f| Reverse(f.file_date));
                 files
                     .into_iter()
-                    .map(|f| try_from_cf_file(f).map_err(Into::into))
+                    .map(|f| try_from_cf_file(f, mod_.class_id.clone()).map_err(Into::into))
                     .collect::<Result<Vec<_>>>()?
             }
-            SourceId::Modrinth(id) => MODRINTH_API
-                .list_versions(id)
-                .await?
-                .into_iter()
-                .map(from_mr_version)
-                .collect_vec(),
+            SourceId::Modrinth(id) => {
+                let project = MODRINTH_API.get_project(id).await?;
+
+                MODRINTH_API
+                    .list_versions(id)
+                    .await?
+                    .into_iter()
+                    .map(|version| from_mr_version(version, Some(project.project_type.clone())))
+                    .collect_vec()
+            }
             SourceId::Github(owner, repo) => GITHUB_API
                 .repos(owner, repo)
                 .releases()
@@ -72,13 +84,22 @@ impl SourceId {
                 .await
                 .map(|r| from_gh_releases(r.items))?,
             SourceId::PinnedCurseforge(mod_id, pin) => {
-                let mod_file = CURSEFORGE_API.get_mod_file(*mod_id, *pin).await?;
-                let cf = try_from_cf_file(mod_file)?;
+                let (mod_file, mod_) = join(
+                    CURSEFORGE_API.get_mod_file(*mod_id, *pin),
+                    CURSEFORGE_API.get_mod(*mod_id),
+                )
+                .await;
+                let (mod_file, mod_) = (mod_file?, mod_?);
+
+                let cf = try_from_cf_file(mod_file, mod_.class_id.clone())?;
                 return Ok(cf.1);
             }
-            SourceId::PinnedModrinth(_, pin) => {
-                let mr_version = MODRINTH_API.get_version(pin).await?;
-                let mr = from_mr_version(mr_version);
+            SourceId::PinnedModrinth(id, pin) => {
+                let (mr_version, mr_project) =
+                    join(MODRINTH_API.get_version(pin), MODRINTH_API.get_project(id)).await;
+                let (mr_version, mr_project) = (mr_version?, mr_project?);
+
+                let mr = from_mr_version(mr_version, Some(mr_project.project_type));
                 return Ok(mr.1);
             }
             SourceId::PinnedGithub((owner, repo), pin) => {

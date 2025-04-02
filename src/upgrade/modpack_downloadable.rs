@@ -1,5 +1,6 @@
 use super::{from_mr_version, try_from_cf_file, DistributionDeniedError};
 use crate::{config::structs::ModpackIdentifier, CURSEFORGE_API, HOME, MODRINTH_API};
+use ferinth::structures::project::ProjectType;
 use reqwest::Client;
 use std::{fs::create_dir_all, path::PathBuf};
 
@@ -24,12 +25,14 @@ impl ModpackIdentifier {
         update: impl Fn(usize) + Send,
     ) -> Result<PathBuf> {
         let (_, download_data) = match self {
-            ModpackIdentifier::CurseForgeModpack(id) => {
-                try_from_cf_file(CURSEFORGE_API.get_mod_files(*id).await?.swap_remove(0))?
-            }
-            ModpackIdentifier::ModrinthModpack(id) => {
-                from_mr_version(MODRINTH_API.list_versions(id).await?.swap_remove(0))
-            }
+            ModpackIdentifier::CurseForgeModpack(id) => try_from_cf_file(
+                CURSEFORGE_API.get_mod_files(*id).await?.swap_remove(0),
+                Some(4471),
+            )?,
+            ModpackIdentifier::ModrinthModpack(id) => from_mr_version(
+                MODRINTH_API.list_versions(id).await?.swap_remove(0),
+                Some(ProjectType::Modpack),
+            ),
         };
 
         let cache_dir = HOME.join(".config").join("ferium").join(".cache");
