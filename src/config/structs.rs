@@ -111,10 +111,10 @@ pub struct Profile {
 
 impl Profile {
     /// A simple contructor that automatically deals with converting to filters
-    pub fn new(game_versions: Option<Vec<Version>>, mod_loader: ModLoader) -> Self {
+    pub fn new(versions: Option<Vec<Version>>, mod_loader: ModLoader) -> Self {
         Self {
             filters: Filters {
-                game_versions,
+                versions,
                 mod_loaders: match mod_loader {
                     ModLoader::Fabric | ModLoader::Quilt => {
                         Some(vec![ModLoader::Fabric, ModLoader::Quilt])
@@ -432,7 +432,7 @@ pub enum SourceKind {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Filters {
     #[serde(default, alias = "version", with = "MaybeListOrSingle")]
-    pub game_versions: Option<Vec<Version>>,
+    pub versions: Option<Vec<Version>>,
     #[serde(default, alias = "mod_loader", with = "MaybeListOrSingle")]
     pub mod_loaders: Option<Vec<ModLoader>>,
     #[serde(default, alias = "release_channel")]
@@ -485,7 +485,7 @@ impl<T> MaybeListOrSingle<T> {
 impl Filters {
     pub fn empty() -> Filters {
         Filters {
-            game_versions: None,
+            versions: None,
             mod_loaders: None,
             release_channels: None,
             filename: None,
@@ -515,7 +515,7 @@ impl Filters {
         }
 
         Filters {
-            game_versions: concat_opts(self.game_versions, other.game_versions),
+            versions: concat_opts(self.versions, other.versions),
             mod_loaders: concat_opts(self.mod_loaders, other.mod_loaders),
             release_channels: concat_opts(self.release_channels, other.release_channels),
             filename: concat_regex(self.filename, other.filename),
@@ -565,7 +565,7 @@ impl Filters {
     }
 
     pub fn game_version_matches(&self, version: &str) -> bool {
-        let Some(versions) = &self.game_versions else {
+        let Some(versions) = &self.versions else {
             return true;
         };
 
@@ -573,7 +573,7 @@ impl Filters {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.mod_loaders.is_none() && self.game_versions.is_none()
+        self.mod_loaders.is_none() && self.versions.is_none()
     }
 }
 
