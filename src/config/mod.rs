@@ -64,13 +64,14 @@ pub fn write_profile(path: impl AsRef<Path>, profile: &structs::Profile) -> Resu
     Ok(())
 }
 
-pub fn migrate_legacy_config(
-    path: impl AsRef<Path>,
-) -> std::result::Result<structs::Config, MigrateError> {
+pub fn migrate_legacy_config(path: impl AsRef<Path>) -> std::result::Result<(), MigrateError> {
     let empty: &Path = Path::new("");
 
-    let dir = path.as_ref().parent().unwrap_or(empty);
+    let dir = path.as_ref().parent().unwrap_or(empty).canonicalize()?;
+    let profiles_dir = dir.join("profiles");
     let config = legacy::read_config(path.as_ref())?;
+
+    create_dir_all(&profiles_dir)?;
 
     let mut profiles = vec![];
 
@@ -84,7 +85,7 @@ pub fn migrate_legacy_config(
         } = legacy_profile;
 
         let path = {
-            let mut path = dir.join(&name);
+            let mut path = profiles_dir.join(&name);
             path.set_extension("toml");
             path
         };
@@ -132,7 +133,16 @@ pub fn migrate_legacy_config(
             .collect(),
     };
 
-    Ok(config)
+    let mut out_config = path.as_ref().to_path_buf();
+    out_config.set_file_name(match out_config.file_name().and_then(|o| o.to_str()) {
+        Some(file_name) => format!("ogj-{file_name}"),
+        None => "ogj-config".to_owned(),
+    });
+    out_config.set_extension("toml");
+
+    write_config(out_config, &config)?;
+
+    Ok(())
 }
 
 #[derive(Error, Debug)]
