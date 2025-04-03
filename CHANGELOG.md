@@ -1,5 +1,14 @@
 # Changelog for Libium
 
+## `ogj-v1.0.0`
+###
+
+Complete overhaul
+
+- Split profiles into separate files
+- A complete overhaul of the profile structs
+- Added support for shaderpacks
+
 ## `1.32.0`
 ###
 
