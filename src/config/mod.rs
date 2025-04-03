@@ -1,11 +1,15 @@
+mod legacy;
 pub mod structs;
 
 use std::{
+    collections::HashMap,
     fs::{self, create_dir_all},
     io::Result,
     path::{Path, PathBuf},
     sync::LazyLock,
 };
+
+use thiserror::Error;
 
 pub static DEFAULT_CONFIG_PATH: LazyLock<PathBuf> = LazyLock::new(|| {
     crate::HOME
@@ -58,4 +62,83 @@ pub fn write_profile(path: impl AsRef<Path>, profile: &structs::Profile) -> Resu
     let contents = toml::to_string(profile).map_err(invalid_data_to_io)?;
     fs::write(path, contents)?;
     Ok(())
+}
+
+pub fn migrate_legacy_config(
+    path: impl AsRef<Path>,
+) -> std::result::Result<structs::Config, MigrateError> {
+    let empty: &Path = Path::new("");
+
+    let dir = path.as_ref().parent().unwrap_or(empty);
+    let config = legacy::read_config(path.as_ref())?;
+
+    let mut profiles = vec![];
+
+    for legacy_profile in config.profiles {
+        let legacy::structs::Profile {
+            name,
+            output_dir: mods_dir,
+            filters,
+            mods: legacy_mods,
+            ..
+        } = legacy_profile;
+
+        let path = {
+            let mut path = dir.join(&name);
+            path.set_extension("toml");
+            path
+        };
+
+        let profile = structs::Profile {
+            filters: legacy::migrate_filters(filters)?,
+            mods: {
+                let mut mods = HashMap::new();
+                for mod_ in legacy_mods {
+                    let id = mod_.slug.clone().unwrap_or(mod_.name.clone());
+                    mods.insert(id, mod_.try_into()?);
+                }
+                mods
+            },
+            shaders: HashMap::new(),
+            modpacks: HashMap::new(),
+            resourcepacks: HashMap::new(),
+        };
+
+        write_profile(&path, &profile)?;
+
+        let shaderpacks_dir = mods_dir.parent().unwrap_or(empty).join("shaderpacks");
+
+        let resourcepacks_dir = mods_dir.parent().unwrap_or(empty).join("resourcepacks");
+
+        let item = structs::ProfileItem {
+            path,
+            name,
+            mods_dir,
+            shaderpacks_dir,
+            resourcepacks_dir,
+        };
+
+        profiles.push(item);
+    }
+
+    let config = structs::Config {
+        active_profile: config.active_profile,
+        profiles,
+        active_modpack: config.active_modpack,
+        modpacks: config
+            .modpacks
+            .into_iter()
+            .map(|modpack| modpack.into())
+            .collect(),
+    };
+
+    Ok(config)
+}
+
+#[derive(Error, Debug)]
+#[error(transparent)]
+pub enum MigrateError {
+    Semver(#[from] semver::Error),
+    Regex(#[from] regex::Error),
+    IO(#[from] std::io::Error),
 }

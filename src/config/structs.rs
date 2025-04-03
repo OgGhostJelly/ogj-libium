@@ -429,7 +429,7 @@ pub enum SourceKind {
     Shaders,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct Filters {
     #[serde(default, alias = "version", with = "MaybeListOrSingle")]
     pub versions: Option<Vec<Version>>,
@@ -484,14 +484,7 @@ impl<T> MaybeListOrSingle<T> {
 
 impl Filters {
     pub fn empty() -> Filters {
-        Filters {
-            versions: None,
-            mod_loaders: None,
-            release_channels: None,
-            filename: None,
-            title: None,
-            description: None,
-        }
+        Filters::default()
     }
 
     pub fn concat(self, other: Filters) -> Filters {
