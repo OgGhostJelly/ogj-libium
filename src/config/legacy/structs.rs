@@ -36,13 +36,13 @@ pub struct Modpack {
     pub identifier: ModpackIdentifier,
 }
 
-impl Into<structs::Modpack> for Modpack {
-    fn into(self) -> structs::Modpack {
+impl From<Modpack> for structs::Modpack {
+    fn from(val: Modpack) -> Self {
         structs::Modpack {
-            name: self.name,
-            output_dir: self.output_dir,
-            install_overrides: self.install_overrides,
-            identifier: self.identifier.into(),
+            name: val.name,
+            output_dir: val.output_dir,
+            install_overrides: val.install_overrides,
+            identifier: val.identifier.into(),
         }
     }
 }
@@ -53,9 +53,9 @@ pub enum ModpackIdentifier {
     ModrinthModpack(String),
 }
 
-impl Into<structs::ModpackIdentifier> for ModpackIdentifier {
-    fn into(self) -> structs::ModpackIdentifier {
-        match self {
+impl From<ModpackIdentifier> for structs::ModpackIdentifier {
+    fn from(val: ModpackIdentifier) -> Self {
+        match val {
             ModpackIdentifier::CurseForgeModpack(id) => {
                 structs::ModpackIdentifier::CurseForgeModpack(id)
             }
@@ -160,9 +160,9 @@ pub enum ModIdentifier {
     PinnedGitHubRepository((String, String), i32),
 }
 
-impl Into<structs::SourceId> for ModIdentifier {
-    fn into(self) -> structs::SourceId {
-        match self {
+impl From<ModIdentifier> for structs::SourceId {
+    fn from(val: ModIdentifier) -> Self {
+        match val {
             ModIdentifier::CurseForgeProject(id) => structs::SourceId::Curseforge(id),
             ModIdentifier::ModrinthProject(id) => structs::SourceId::Modrinth(id),
             ModIdentifier::GitHubRepository(owner, repo) => structs::SourceId::Github(owner, repo),
@@ -188,9 +188,9 @@ pub enum ModLoader {
     NeoForge,
 }
 
-impl Into<structs::ModLoader> for ModLoader {
-    fn into(self) -> structs::ModLoader {
-        match self {
+impl From<ModLoader> for structs::ModLoader {
+    fn from(val: ModLoader) -> Self {
+        match val {
             ModLoader::Quilt => structs::ModLoader::Quilt,
             ModLoader::Fabric => structs::ModLoader::Fabric,
             ModLoader::Forge => structs::ModLoader::Forge,

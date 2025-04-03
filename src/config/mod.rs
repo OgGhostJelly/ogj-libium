@@ -42,7 +42,7 @@ pub fn read_profile(path: impl AsRef<Path>) -> Result<Option<structs::Profile>> 
     let file = match fs::read_to_string(path) {
         Ok(file) => file,
         Err(e) if matches!(e.kind(), std::io::ErrorKind::NotFound) => return Ok(None),
-        Err(e) => return Err(e.into()),
+        Err(e) => return Err(e),
     };
 
     let profile: structs::Profile = toml::from_str(&file).map_err(invalid_data_to_io)?;

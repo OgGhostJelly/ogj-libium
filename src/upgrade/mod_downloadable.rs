@@ -63,7 +63,7 @@ impl SourceId {
                 files.sort_unstable_by_key(|f| Reverse(f.file_date));
                 files
                     .into_iter()
-                    .map(|f| try_from_cf_file(f, mod_.class_id.clone()).map_err(Into::into))
+                    .map(|f| try_from_cf_file(f, mod_.class_id).map_err(Into::into))
                     .collect::<Result<Vec<_>>>()?
             }
             SourceId::Modrinth(id) => {
@@ -91,7 +91,7 @@ impl SourceId {
                 .await;
                 let (mod_file, mod_) = (mod_file?, mod_?);
 
-                let cf = try_from_cf_file(mod_file, mod_.class_id.clone())?;
+                let cf = try_from_cf_file(mod_file, mod_.class_id)?;
                 return Ok(cf.1);
             }
             SourceId::PinnedModrinth(id, pin) => {

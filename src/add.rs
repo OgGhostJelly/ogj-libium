@@ -416,7 +416,7 @@ pub fn profile_contains(
     map: &HashMap<String, Source>,
     pred: impl Clone + Fn(&SourceId) -> bool,
 ) -> bool {
-    for (_, source) in map {
+    for source in map.values() {
         if source_contains(source, pred.clone()) {
             return true;
         }

@@ -279,15 +279,15 @@ pub enum SourceId {
     PinnedGithub((String, String), i32),
 }
 
-impl SourceId {
-    pub fn to_string(&self) -> String {
+impl fmt::Display for SourceId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            SourceId::Curseforge(id) => format!("cf:{id}"),
-            SourceId::Modrinth(id) => format!("mr:{id}"),
-            SourceId::Github(owner, repo) => format!("gh:{owner}/{repo}"),
-            SourceId::PinnedCurseforge(id, pin) => format!("cf:{id}*{pin}"),
-            SourceId::PinnedModrinth(id, pin) => format!("mr:{id}*{pin}"),
-            SourceId::PinnedGithub((owner, repo), pin) => todo!("gh:{owner}/{repo}*{pin}"),
+            SourceId::Curseforge(id) => write!(f, "cf:{id}"),
+            SourceId::Modrinth(id) => write!(f, "mr:{id}"),
+            SourceId::Github(owner, repo) => write!(f, "gh:{owner}/{repo}"),
+            SourceId::PinnedCurseforge(id, pin) => write!(f, "cf:{id}*{pin}"),
+            SourceId::PinnedModrinth(id, pin) => write!(f, "mr:{id}*{pin}"),
+            SourceId::PinnedGithub((owner, repo), pin) => write!(f, "gh:{owner}/{repo}*{pin}"),
         }
     }
 }
@@ -350,7 +350,7 @@ impl<'de> Visitor<'de> for SourceTagVisitor {
             "cf" | "curseforge" => match parse_with_pin(id, |id| id.parse(), |pin| pin.parse()) {
                 (Ok(id), None) => Ok(SourceId::Curseforge(id)),
                 (Ok(id), Some(Ok(pin))) => Ok(SourceId::PinnedCurseforge(id, pin)),
-                (Err(e), _) | (_, Some(Err(e))) => return Err(E::custom(e)),
+                (Err(e), _) | (_, Some(Err(e))) => Err(E::custom(e)),
             },
             "mr" | "modrinth" => match parse_with_pin(id, |id| id, |pin| pin) {
                 (id, None) => Ok(SourceId::Modrinth(id.to_owned())),
@@ -408,7 +408,7 @@ impl<'a> SourceIdsIter<'a> {
                 }
                 self.next()
             }
-            Source::Detailed { src, .. } => self.next_source(&src),
+            Source::Detailed { src, .. } => self.next_source(src),
         }
     }
 }
@@ -627,7 +627,7 @@ impl fmt::Debug for Regex {
 
 impl fmt::Display for Regex {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0.to_string())
+        write!(f, "{}", self.0)
     }
 }
 
@@ -708,7 +708,7 @@ impl Version {
 
 impl fmt::Display for Version {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0.to_string())
+        write!(f, "{}", self.0)
     }
 }
 

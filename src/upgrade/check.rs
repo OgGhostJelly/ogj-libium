@@ -108,7 +108,6 @@ pub async fn select_latest(
         .next()
         .and_then(|set_1| {
             filtered
-                .into_iter()
                 .fold(set_1.clone(), |set_a, set_b| {
                     set_a.intersection(&set_b).copied().collect_hashset()
                 })

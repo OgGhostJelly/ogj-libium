@@ -10,6 +10,7 @@ description = "Multi-source backend for managing Minecraft mods and modpacks fro
 repository = "https://github.com/gorilla-devs/libium"
 readme = "README.md"
 license = "MPL-2.0"
+categories = ["command-line-interface"]
 keywords = [
     "minecraft",
     "mod-manager",

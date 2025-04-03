@@ -106,9 +106,9 @@ pub enum ReleaseChannel {
     Alpha,
 }
 
-impl Into<structs::ReleaseChannel> for ReleaseChannel {
-    fn into(self) -> structs::ReleaseChannel {
-        match self {
+impl From<ReleaseChannel> for structs::ReleaseChannel {
+    fn from(val: ReleaseChannel) -> Self {
+        match val {
             ReleaseChannel::Release => structs::ReleaseChannel::Release,
             ReleaseChannel::Beta => structs::ReleaseChannel::Beta,
             ReleaseChannel::Alpha => structs::ReleaseChannel::Alpha,
