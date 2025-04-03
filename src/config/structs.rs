@@ -680,7 +680,7 @@ impl Version {
         let (patch, rest) = find_split(rest);
 
         if !rest.is_empty() {
-            println!("WARN: semver parse error: unexpected eof, discarded data ({rest:?})");
+            println!("WARN: semver parse error ({s:?}): unexpected eof, discarded data ({rest:?})");
         }
 
         fn parse_part(s: &str) -> u64 {
