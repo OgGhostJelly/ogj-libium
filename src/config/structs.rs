@@ -704,6 +704,10 @@ impl Version {
 
         self.0.matches(&version)
     }
+
+    pub fn into_req(self) -> semver::VersionReq {
+        self.0
+    }
 }
 
 impl fmt::Display for Version {
