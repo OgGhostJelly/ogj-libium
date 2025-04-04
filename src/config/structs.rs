@@ -13,7 +13,7 @@ use std::{
     str::FromStr,
 };
 
-#[derive(Deserialize, Serialize, Debug, Default, Clone)]
+#[derive(Deserialize, Serialize, Debug, Default)]
 pub struct Config {
     #[serde(skip_serializing_if = "is_zero")]
     #[serde(default)]
@@ -32,10 +32,12 @@ pub struct Config {
     pub modpacks: Vec<Modpack>,
 }
 
-#[derive(Deserialize, Serialize, Debug, Default, Clone)]
+#[derive(Deserialize, Serialize, Debug)]
 pub struct ProfileItem {
-    /// The path to the profile `.json` file.
-    pub path: PathBuf,
+    /// The profile source
+    // The field used to be called 'path' so its aliased to that for legacy reasons
+    #[serde(alias = "path")]
+    pub profile: ProfileSource,
     /// The unique name of the profile.
     pub name: String,
     /// The directory to download mod files to
@@ -46,18 +48,36 @@ pub struct ProfileItem {
     pub resourcepacks_dir: PathBuf,
 }
 
+/// The path to the profile `.toml` file or the profile data itself.
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(untagged)]
+pub enum ProfileSource {
+    Path(PathBuf),
+    Embedded(Box<Profile>),
+}
+
 impl ProfileItem {
-    pub fn infer_path(
-        path: Option<PathBuf>,
+    pub fn new(
+        profile: ProfileSource,
         name: String,
         mods_dir: PathBuf,
-        resourcepacks_dir: PathBuf,
         shaderpacks_dir: PathBuf,
-    ) -> std::io::Result<Self> {
+        resourcepacks_dir: PathBuf,
+    ) -> Self {
+        Self {
+            profile,
+            name,
+            mods_dir,
+            shaderpacks_dir,
+            resourcepacks_dir,
+        }
+    }
+
+    pub fn infer_path(path: Option<PathBuf>, name: &str) -> std::io::Result<PathBuf> {
         let path = match path {
             Some(path) => path,
             None => {
-                let mut path = current_dir()?.join(&name);
+                let mut path = current_dir()?.join(name);
                 path.set_extension("toml");
                 path
             }
@@ -67,13 +87,7 @@ impl ProfileItem {
 
         let path = path.canonicalize()?;
 
-        Ok(Self {
-            path,
-            name,
-            mods_dir,
-            shaderpacks_dir,
-            resourcepacks_dir,
-        })
+        Ok(path)
     }
 }
 
@@ -95,7 +109,7 @@ pub enum ModpackIdentifier {
     ModrinthModpack(String),
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Profile {
     #[serde(flatten)]
     pub filters: Filters,

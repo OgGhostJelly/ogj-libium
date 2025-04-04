@@ -9,6 +9,7 @@ use std::{
     sync::LazyLock,
 };
 
+use structs::ProfileSource;
 use thiserror::Error;
 
 pub static DEFAULT_CONFIG_PATH: LazyLock<PathBuf> = LazyLock::new(|| {
@@ -64,12 +65,18 @@ pub fn write_profile(path: impl AsRef<Path>, profile: &structs::Profile) -> Resu
     Ok(())
 }
 
-pub fn migrate_legacy_config(path: impl AsRef<Path>) -> std::result::Result<(), MigrateError> {
+pub fn migrate_legacy_config(
+    old_config_path: impl AsRef<Path>,
+) -> std::result::Result<(), MigrateError> {
     let empty: &Path = Path::new("");
 
-    let dir = path.as_ref().parent().unwrap_or(empty).canonicalize()?;
+    let dir = old_config_path
+        .as_ref()
+        .parent()
+        .unwrap_or(empty)
+        .canonicalize()?;
     let profiles_dir = dir.join("profiles");
-    let config = legacy::read_config(path.as_ref())?;
+    let config = legacy::read_config(old_config_path.as_ref())?;
 
     create_dir_all(&profiles_dir)?;
 
@@ -83,12 +90,6 @@ pub fn migrate_legacy_config(path: impl AsRef<Path>) -> std::result::Result<(), 
             mods: legacy_mods,
             ..
         } = legacy_profile;
-
-        let path = {
-            let mut path = profiles_dir.join(&name);
-            path.set_extension("toml");
-            path
-        };
 
         let profile = structs::Profile {
             filters: legacy::migrate_filters(filters)?,
@@ -105,19 +106,17 @@ pub fn migrate_legacy_config(path: impl AsRef<Path>) -> std::result::Result<(), 
             resourcepacks: HashMap::new(),
         };
 
-        write_profile(&path, &profile)?;
-
         let shaderpacks_dir = mods_dir.parent().unwrap_or(empty).join("shaderpacks");
 
         let resourcepacks_dir = mods_dir.parent().unwrap_or(empty).join("resourcepacks");
 
-        let item = structs::ProfileItem {
-            path,
+        let item = structs::ProfileItem::new(
+            ProfileSource::Embedded(Box::new(profile)),
             name,
             mods_dir,
             shaderpacks_dir,
             resourcepacks_dir,
-        };
+        );
 
         profiles.push(item);
     }
@@ -133,7 +132,7 @@ pub fn migrate_legacy_config(path: impl AsRef<Path>) -> std::result::Result<(), 
             .collect(),
     };
 
-    let mut out_config = path.as_ref().to_path_buf();
+    let mut out_config = old_config_path.as_ref().to_path_buf();
     out_config.set_file_name(match out_config.file_name().and_then(|o| o.to_str()) {
         Some(file_name) => format!("ogj-{file_name}"),
         None => "ogj-config".to_owned(),
