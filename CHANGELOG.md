@@ -1,5 +1,10 @@
 # Changelog for Libium
 
+## `ogj-v1.1.0`
+
+- Support for embedded profiles
+- Some miscellaneous refactors
+
 ## `ogj-v1.0.0`
 ###
 
