@@ -213,8 +213,27 @@ impl Profile {
         Ok(())
     }
 
-    pub fn mod_ids(&self) -> impl Iterator<Item = &SourceId> {
-        self.mods.iter().flat_map(|(_, source)| source.ids())
+    pub fn ids(&self) -> impl Iterator<Item = (SourceKind, &SourceId)> {
+        let mod_ids = self
+            .mods
+            .iter()
+            .flat_map(|(_, source)| source.ids().map(|id| (SourceKind::Mods, id)));
+        let resourcepack_ids = self
+            .resourcepacks
+            .iter()
+            .flat_map(|(_, source)| source.ids().map(|id| (SourceKind::Resourcepacks, id)));
+        let shaderpack_ids = self
+            .shaders
+            .iter()
+            .flat_map(|(_, source)| source.ids().map(|id| (SourceKind::Shaders, id)));
+        let modpack_ids = self
+            .modpacks
+            .iter()
+            .flat_map(|(_, source)| source.ids().map(|id| (SourceKind::Modpacks, id)));
+        mod_ids
+            .chain(resourcepack_ids)
+            .chain(shaderpack_ids)
+            .chain(modpack_ids)
     }
 
     pub fn top_sources(&self) -> impl Iterator<Item = (SourceKind, (&String, &Source))> {
