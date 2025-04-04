@@ -1,5 +1,5 @@
 use crate::{
-    config::structs::{Filters, ModLoader, Profile, ReleaseChannel, Source, SourceId},
+    config::structs::{Filters, ModLoader, Profile, ReleaseChannel, Source, SourceId, SourceKind},
     iter_ext::IterExt as _,
     upgrade::{check, Metadata},
     CURSEFORGE_API, GITHUB_API, MODRINTH_API,
@@ -21,10 +21,10 @@ pub enum Error {
     Incompatible(#[from] check::Error),
     #[error("The project does not exist")]
     DoesNotExist,
-    #[error("The project is not a mod")]
-    NotAMod,
-    #[error("The project type '{0}' is not supported")]
-    UnsupportedProjectType(String),
+    #[error("The project class id '{0:?}' is not supported")]
+    UnsupportedClassId(Option<usize>),
+    #[error("The project type '{0:?}' is not supported")]
+    UnsupportedProjectType(ProjectType),
     #[error("GitHub: {0}")]
     GitHubError(String),
     #[error("GitHub: {0:#?}")]
@@ -305,7 +305,8 @@ pub async fn github(
     let user = id.1.as_ref().trim();
 
     // Add it to the profile
-    profile.push_mod(
+    profile.push(
+        SourceKind::Mods,
         format!("{repo}/{user}"),
         Source::github(repo.into(), user.into(), filters),
     )?;
@@ -348,13 +349,10 @@ pub async fn modrinth(
     let source = Source::modrinth(project.id.clone(), filters);
 
     // Add it to the profile
-    match &project.project_type {
-        ProjectType::Mod => profile.push_mod(id, source),
-        ProjectType::Shader => profile.push_shader(id, source),
-        ProjectType::Modpack => profile.push_modpack(id, source),
-        ProjectType::ResourcePack => profile.push_resourcepack(id, source),
-        ty => Err(Error::UnsupportedProjectType(format!("{ty:?}"))),
-    }
+    let kind = SourceKind::from_mr_project_type(project.project_type.clone())
+        .ok_or(Error::UnsupportedProjectType(project.project_type.clone()))?;
+
+    profile.push(kind, id, source)
 }
 
 /// Check if the mod of `project_id` has not already been added, is a mod, and is compatible with `profile`.
@@ -368,10 +366,6 @@ pub async fn curseforge(
     // Check if it can be downloaded by third-parties
     if Some(false) == project.allow_mod_distribution {
         Err(Error::DistributionDenied)
-
-    // Check if the project is a Minecraft mod
-    } else if !project.links.website_url.as_str().contains("mc-mods") {
-        Err(Error::NotAMod)
 
     // Check if the mod is compatible
     } else {
@@ -402,8 +396,13 @@ pub async fn curseforge(
             )
             .await?;
         }
+
         // Add it to the profile
-        profile.push_mod(
+        profile.push(
+            project
+                .class_id
+                .and_then(SourceKind::from_cf_class_id)
+                .ok_or(Error::UnsupportedClassId(project.class_id))?,
             project.slug.clone(),
             Source::curseforge(project.id, filters),
         )?;

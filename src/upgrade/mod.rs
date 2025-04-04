@@ -117,12 +117,7 @@ pub fn try_from_cf_file(
                     }
                 })
                 .collect_vec(),
-            kind: class_id.and_then(|class_id| match class_id {
-                12 => Some(SourceKind::Resourcepacks),
-                6 => Some(SourceKind::Mods),
-                6552 => Some(SourceKind::Shaders),
-                _ => None,
-            }),
+            kind: class_id.and_then(SourceKind::from_cf_class_id),
         },
     ))
 }

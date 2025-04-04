@@ -1,6 +1,7 @@
 use crate::add;
 
 use derive_more::derive::Display;
+use ferinth::structures::project::ProjectType;
 use semver::Prerelease;
 use serde::{de::Visitor, Deserialize, Serialize};
 use std::{
@@ -9,7 +10,7 @@ use std::{
     fmt,
     fs::File,
     marker::PhantomData,
-    path::PathBuf,
+    path::{Path, PathBuf},
     str::FromStr,
 };
 
@@ -46,6 +47,17 @@ pub struct ProfileItem {
     pub shaderpacks_dir: PathBuf,
     /// The directory to download mod files to
     pub resourcepacks_dir: PathBuf,
+}
+
+impl ProfileItem {
+    pub fn output_dir(&self, kind: SourceKind) -> &PathBuf {
+        match kind {
+            SourceKind::Mods => &self.mods_dir,
+            SourceKind::Resourcepacks => &self.resourcepacks_dir,
+            SourceKind::Shaders => &self.shaderpacks_dir,
+            SourceKind::Modpacks => todo!("modpacks are not yet supported"),
+        }
+    }
 }
 
 /// The path to the profile `.toml` file or the profile data itself.
@@ -144,28 +156,27 @@ impl Profile {
         }
     }
 
-    pub fn push_mod(&mut self, id: String, source: Source) -> Result<(), add::Error> {
-        Self::push_map(&mut self.mods, id, source)
+    pub fn map_mut(&mut self, kind: SourceKind) -> &mut HashMap<String, Source> {
+        match kind {
+            SourceKind::Mods => &mut self.mods,
+            SourceKind::Resourcepacks => &mut self.resourcepacks,
+            SourceKind::Shaders => &mut self.shaders,
+            SourceKind::Modpacks => &mut self.modpacks,
+        }
     }
 
-    pub fn push_shader(&mut self, id: String, source: Source) -> Result<(), add::Error> {
-        println!("{id} {source:?}");
-        Self::push_map(&mut self.shaders, id, source)
+    pub fn map(&self, kind: SourceKind) -> &HashMap<String, Source> {
+        match kind {
+            SourceKind::Mods => &self.mods,
+            SourceKind::Resourcepacks => &self.resourcepacks,
+            SourceKind::Shaders => &self.shaders,
+            SourceKind::Modpacks => &self.modpacks,
+        }
     }
 
-    pub fn push_modpack(&mut self, id: String, source: Source) -> Result<(), add::Error> {
-        Self::push_map(&mut self.modpacks, id, source)
-    }
+    pub fn push(&mut self, kind: SourceKind, id: String, source: Source) -> Result<(), add::Error> {
+        let map = self.map_mut(kind);
 
-    pub fn push_resourcepack(&mut self, id: String, source: Source) -> Result<(), add::Error> {
-        Self::push_map(&mut self.resourcepacks, id, source)
-    }
-
-    pub fn push_map(
-        map: &mut HashMap<String, Source>,
-        id: String,
-        source: Source,
-    ) -> Result<(), add::Error> {
         for source_id in source.ids() {
             let has_duplicates = map
                 .iter()
@@ -206,11 +217,32 @@ impl Profile {
         self.mods.iter().flat_map(|(_, source)| source.ids())
     }
 
-    pub fn list_top_level_sources(&self) -> impl Iterator<Item = (SourceKind, (&String, &Source))> {
+    pub fn top_sources(&self) -> impl Iterator<Item = (SourceKind, (&String, &Source))> {
         let mod_ids = self.mods.iter().map(|id| (SourceKind::Mods, id));
         let resourcepack_ids = self.resourcepacks.iter().map(|id| (SourceKind::Mods, id));
         let shaderpack_ids = self.shaders.iter().map(|id| (SourceKind::Mods, id));
-        mod_ids.chain(resourcepack_ids).chain(shaderpack_ids)
+        let modpack_ids = self.modpacks.iter().map(|id| (SourceKind::Modpacks, id));
+        mod_ids
+            .chain(resourcepack_ids)
+            .chain(shaderpack_ids)
+            .chain(modpack_ids)
+    }
+
+    pub fn top_sources_owned(self) -> impl Iterator<Item = (SourceKind, (String, Source))> {
+        let mod_ids = self.mods.into_iter().map(|id| (SourceKind::Mods, id));
+        let resourcepack_ids = self
+            .resourcepacks
+            .into_iter()
+            .map(|id| (SourceKind::Mods, id));
+        let shaderpack_ids = self.shaders.into_iter().map(|id| (SourceKind::Mods, id));
+        let modpack_ids = self
+            .modpacks
+            .into_iter()
+            .map(|id| (SourceKind::Modpacks, id));
+        mod_ids
+            .chain(resourcepack_ids)
+            .chain(shaderpack_ids)
+            .chain(modpack_ids)
     }
 }
 
@@ -448,6 +480,48 @@ pub enum SourceKind {
     Mods,
     Resourcepacks,
     Shaders,
+    Modpacks,
+}
+
+impl SourceKind {
+    pub const ARRAY: &[Self] = &[
+        Self::Mods,
+        Self::Resourcepacks,
+        Self::Shaders,
+        Self::Modpacks,
+    ];
+
+    pub fn from_cf_class_id(class_id: usize) -> Option<SourceKind> {
+        match class_id {
+            12 => Some(SourceKind::Resourcepacks),
+            6 => Some(SourceKind::Mods),
+            6552 => Some(SourceKind::Shaders),
+            4471 => Some(SourceKind::Modpacks),
+            _ => None,
+        }
+    }
+
+    pub fn from_mr_project_type(project_type: ProjectType) -> Option<SourceKind> {
+        match project_type {
+            ProjectType::Project => None,
+            ProjectType::Mod => Some(SourceKind::Mods),
+            ProjectType::Shader => Some(SourceKind::Shaders),
+            ProjectType::Plugin => None,
+            ProjectType::Modpack => Some(SourceKind::Modpacks),
+            ProjectType::Datapack => None,
+            ProjectType::ResourcePack => Some(SourceKind::Resourcepacks),
+        }
+    }
+
+    pub fn infer_from_path(path: &Path) -> Option<SourceKind> {
+        if path.ends_with("jar") {
+            Some(SourceKind::Mods)
+        } else if path.ends_with("zip") {
+            Some(SourceKind::Resourcepacks)
+        } else {
+            None
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
