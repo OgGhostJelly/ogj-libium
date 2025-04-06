@@ -9,10 +9,14 @@ use std::{
     env::current_dir,
     fmt,
     fs::File,
+    io,
     marker::PhantomData,
+    ops::{Deref, DerefMut},
     path::{Path, PathBuf},
     str::FromStr,
 };
+
+use super::{read_profile, write_profile};
 
 #[derive(Deserialize, Serialize, Debug, Default)]
 pub struct Config {
@@ -39,6 +43,12 @@ pub struct ProfileItem {
     // The field used to be called 'path' so its aliased to that for legacy reasons
     #[serde(alias = "path")]
     pub profile: ProfileSource,
+    #[serde(flatten)]
+    pub config: ProfileItemConfig,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+pub struct ProfileItemConfig {
     /// The unique name of the profile.
     pub name: String,
     /// The directory to download mod files to
@@ -49,7 +59,7 @@ pub struct ProfileItem {
     pub resourcepacks_dir: PathBuf,
 }
 
-impl ProfileItem {
+impl ProfileItemConfig {
     pub fn output_dir(&self, kind: SourceKind) -> &PathBuf {
         match kind {
             SourceKind::Mods => &self.mods_dir,
@@ -68,6 +78,86 @@ pub enum ProfileSource {
     Embedded(Box<Profile>),
 }
 
+macro_rules! fn_get_body {
+    ( $self:expr, $ctor:ident ) => {
+        match $self {
+            ProfileSource::Path(path) => {
+                let Some(profile) = read_profile(&path)? else {
+                    return Ok(None);
+                };
+
+                Ok(Some($ctor::Path(path, Box::new(profile))))
+            }
+            ProfileSource::Embedded(profile) => Ok(Some($ctor::Embedded(profile))),
+        }
+    };
+}
+
+impl ProfileSource {
+    pub fn get(&self) -> Result<Option<ProfileSourceRef<'_>>, io::Error> {
+        fn_get_body!(self, ProfileSourceRef)
+    }
+
+    pub fn get_mut(&mut self) -> Result<Option<ProfileSourceMut<'_>>, io::Error> {
+        fn_get_body!(self, ProfileSourceMut)
+    }
+}
+
+pub enum ProfileSourceMut<'a> {
+    Path(&'a PathBuf, Box<Profile>),
+    Embedded(&'a mut Profile),
+}
+
+impl<'a> ProfileSourceMut<'a> {
+    pub fn to_ref(self) -> ProfileSourceRef<'a> {
+        match self {
+            ProfileSourceMut::Path(path, profile) => ProfileSourceRef::Path(path, profile),
+            ProfileSourceMut::Embedded(profile) => ProfileSourceRef::Embedded(profile),
+        }
+    }
+}
+
+pub enum ProfileSourceRef<'a> {
+    Path(&'a PathBuf, Box<Profile>),
+    Embedded(&'a Profile),
+}
+
+impl<'a> DerefMut for ProfileSourceMut<'a> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        match self {
+            ProfileSourceMut::Path(_, profile) => profile,
+            ProfileSourceMut::Embedded(profile) => profile,
+        }
+    }
+}
+
+macro_rules! impl_profile_source_ref {
+    ( $t:ty ) => {
+        impl<'a> Deref for $t {
+            type Target = Profile;
+
+            fn deref(&self) -> &Self::Target {
+                match self {
+                    Self::Path(_, profile) => profile,
+                    Self::Embedded(profile) => profile,
+                }
+            }
+        }
+
+        impl<'a> $t {
+            pub fn write(self) -> Result<(), io::Error> {
+                match self {
+                    Self::Path(path, profile) => write_profile(path, &profile),
+                    Self::Embedded(_) => Ok(()),
+                }
+            }
+        }
+    };
+}
+
+impl_profile_source_ref!(ProfileSourceRef<'a>);
+impl_profile_source_ref!(ProfileSourceMut<'a>);
+
 impl ProfileItem {
     pub fn new(
         profile: ProfileSource,
@@ -78,10 +168,12 @@ impl ProfileItem {
     ) -> Self {
         Self {
             profile,
-            name,
-            mods_dir,
-            shaderpacks_dir,
-            resourcepacks_dir,
+            config: ProfileItemConfig {
+                name,
+                mods_dir,
+                shaderpacks_dir,
+                resourcepacks_dir,
+            },
         }
     }
 
@@ -238,26 +330,12 @@ impl Profile {
 
     pub fn top_sources(&self) -> impl Iterator<Item = (SourceKind, (&String, &Source))> {
         let mod_ids = self.mods.iter().map(|id| (SourceKind::Mods, id));
-        let resourcepack_ids = self.resourcepacks.iter().map(|id| (SourceKind::Mods, id));
-        let shaderpack_ids = self.shaders.iter().map(|id| (SourceKind::Mods, id));
-        let modpack_ids = self.modpacks.iter().map(|id| (SourceKind::Modpacks, id));
-        mod_ids
-            .chain(resourcepack_ids)
-            .chain(shaderpack_ids)
-            .chain(modpack_ids)
-    }
-
-    pub fn top_sources_owned(self) -> impl Iterator<Item = (SourceKind, (String, Source))> {
-        let mod_ids = self.mods.into_iter().map(|id| (SourceKind::Mods, id));
         let resourcepack_ids = self
             .resourcepacks
-            .into_iter()
-            .map(|id| (SourceKind::Mods, id));
-        let shaderpack_ids = self.shaders.into_iter().map(|id| (SourceKind::Mods, id));
-        let modpack_ids = self
-            .modpacks
-            .into_iter()
-            .map(|id| (SourceKind::Modpacks, id));
+            .iter()
+            .map(|id| (SourceKind::Resourcepacks, id));
+        let shaderpack_ids = self.shaders.iter().map(|id| (SourceKind::Shaders, id));
+        let modpack_ids = self.modpacks.iter().map(|id| (SourceKind::Modpacks, id));
         mod_ids
             .chain(resourcepack_ids)
             .chain(shaderpack_ids)
