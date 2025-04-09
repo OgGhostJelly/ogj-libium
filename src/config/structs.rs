@@ -43,21 +43,17 @@ pub struct ProfileItem {
 pub struct ProfileItemConfig {
     /// The unique name of the profile.
     pub name: String,
-    /// The directory to download mod files to
-    pub mods_dir: PathBuf,
-    /// The directory to download mod files to
-    pub shaderpacks_dir: PathBuf,
-    /// The directory to download mod files to
-    pub resourcepacks_dir: PathBuf,
+    /// The `.minecraft` directory to download mod files to
+    pub minecraft_dir: PathBuf,
 }
 
 impl ProfileItemConfig {
-    pub fn output_dir(&self, kind: SourceKind) -> &PathBuf {
+    pub fn output_dir(&self, kind: SourceKind) -> PathBuf {
         match kind {
-            SourceKind::Mods => &self.mods_dir,
-            SourceKind::Resourcepacks => &self.resourcepacks_dir,
-            SourceKind::Shaders => &self.shaderpacks_dir,
-            SourceKind::Modpacks => todo!("modpacks are not yet supported"),
+            SourceKind::Mods => self.minecraft_dir.join("mods"),
+            SourceKind::Resourcepacks => self.minecraft_dir.join("resourcepacks"),
+            SourceKind::Shaders => self.minecraft_dir.join("shaderpacks"),
+            SourceKind::Modpacks => self.minecraft_dir.clone(),
         }
     }
 }
@@ -151,20 +147,12 @@ impl_profile_source_ref!(ProfileSourceRef<'a>);
 impl_profile_source_ref!(ProfileSourceMut<'a>);
 
 impl ProfileItem {
-    pub fn new(
-        profile: ProfileSource,
-        name: String,
-        mods_dir: PathBuf,
-        shaderpacks_dir: PathBuf,
-        resourcepacks_dir: PathBuf,
-    ) -> Self {
+    pub fn new(profile: ProfileSource, name: String, minecraft_dir: PathBuf) -> Self {
         Self {
             profile,
             config: ProfileItemConfig {
                 name,
-                mods_dir,
-                shaderpacks_dir,
-                resourcepacks_dir,
+                minecraft_dir,
             },
         }
     }

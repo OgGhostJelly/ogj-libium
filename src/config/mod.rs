@@ -105,25 +105,23 @@ pub fn migrate_legacy_config(
             resourcepacks: HashMap::new(),
         };
 
-        let shaderpacks_dir = mods_dir.parent().unwrap_or(empty).join("shaderpacks");
-
-        let resourcepacks_dir = mods_dir.parent().unwrap_or(empty).join("resourcepacks");
+        let minecraft_dir = mods_dir.parent().unwrap_or(empty).to_path_buf();
 
         let item = structs::ProfileItem::new(
             structs::ProfileSource::Embedded(Box::new(profile)),
             name,
-            mods_dir,
-            shaderpacks_dir,
-            resourcepacks_dir,
+            minecraft_dir,
         );
 
         profiles.push(item);
     }
 
     for legacy_modpack in config.modpacks {
-        let mods_dir = legacy_modpack.output_dir;
-        let shaderpacks_dir = mods_dir.parent().unwrap_or(empty).join("shaderpacks");
-        let resourcepacks_dir = mods_dir.parent().unwrap_or(empty).join("resourcepacks");
+        let minecraft_dir = legacy_modpack
+            .output_dir
+            .parent()
+            .unwrap_or(empty)
+            .to_path_buf();
         let source: structs::Source = legacy_modpack.identifier.into();
 
         let profile = structs::Profile {
@@ -138,9 +136,7 @@ pub fn migrate_legacy_config(
             profile: structs::ProfileSource::Embedded(Box::new(profile)),
             config: structs::ProfileItemConfig {
                 name: legacy_modpack.name,
-                mods_dir,
-                shaderpacks_dir,
-                resourcepacks_dir,
+                minecraft_dir,
             },
         })
     }

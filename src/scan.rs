@@ -27,6 +27,7 @@ pub async fn scan(
     let mut mr_hashes = vec![];
     let mut cf_hashes = vec![];
 
+    // Get the file hashes and fingerprints for every jar in dir_path
     for entry in read_dir(dir_path)? {
         let path = entry?.path();
         if path.is_file()
@@ -51,6 +52,7 @@ pub async fn scan(
 
     hashing_complete();
 
+    // Fetch the mods using the file hashes.
     let (mr_results, cf_results) = try_join!(
         MODRINTH_API
             .get_versions_from_hashes(mr_hashes.clone())
