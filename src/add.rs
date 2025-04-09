@@ -241,14 +241,34 @@ pub async fn add(
 
     let mut success_names = Vec::new();
 
+    fn to_name(name: &str, kind: Option<SourceKind>) -> String {
+        match kind {
+            Some(kind) => format!(
+                "{name} ({})",
+                match kind {
+                    SourceKind::Mods => "Mod",
+                    SourceKind::Resourcepacks => "Resourcepack",
+                    SourceKind::Shaders => "Shader",
+                    SourceKind::Modpacks => "Modpack",
+                },
+            ),
+            None => name.to_owned(),
+        }
+    }
+
     for project in cf_projects {
         if let Some(i) = cf_ids.iter().position(|&id| id == project.id) {
             cf_ids.swap_remove(i);
         }
 
+        let name = to_name(
+            &project.name,
+            project.class_id.and_then(SourceKind::from_cf_class_id),
+        );
+
         match curseforge(&project, profile, perform_checks, filters.clone()).await {
-            Ok(_) => success_names.push(project.name),
-            Err(err) => errors.push((format!("{} ({})", project.name, project.id), err)),
+            Ok(_) => success_names.push(name),
+            Err(err) => errors.push((format!("{} ({})", name, project.id), err)),
         }
     }
     errors.extend(
@@ -265,9 +285,14 @@ pub async fn add(
             mr_ids.swap_remove(i);
         }
 
+        let name = to_name(
+            &project.title,
+            SourceKind::from_mr_project_type(project.project_type.clone()),
+        );
+
         match modrinth(&project, profile, perform_checks, filters.clone()).await {
-            Ok(_) => success_names.push(project.title),
-            Err(err) => errors.push((format!("{} ({})", project.title, project.id), err)),
+            Ok(_) => success_names.push(name),
+            Err(err) => errors.push((format!("{} ({})", name, project.id), err)),
         }
     }
     errors.extend(

@@ -6,6 +6,7 @@ Restructuring, refactors and breaking changes
 
 - Support for embedded profiles
 - Only store the `.minecraft` dir and find the other folder locations at runtime
+- Made `add` display the project type
 - Some miscellaneous refactors
 
 ## `ogj-v1.0.0`
