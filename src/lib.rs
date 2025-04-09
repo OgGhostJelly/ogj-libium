@@ -1,7 +1,6 @@
 pub mod add;
 pub mod config;
 pub mod iter_ext;
-pub mod modpack;
 pub mod scan;
 pub mod upgrade;
 pub mod version_ext;

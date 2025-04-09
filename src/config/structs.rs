@@ -27,14 +27,6 @@ pub struct Config {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     #[serde(default)]
     pub profiles: Vec<ProfileItem>,
-
-    #[serde(skip_serializing_if = "is_zero")]
-    #[serde(default)]
-    pub active_modpack: usize,
-
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    #[serde(default)]
-    pub modpacks: Vec<Modpack>,
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -197,20 +189,6 @@ impl ProfileItem {
 
 const fn is_zero(n: &usize) -> bool {
     *n == 0
-}
-
-#[derive(Deserialize, Serialize, Debug, Clone)]
-pub struct Modpack {
-    pub name: String,
-    pub output_dir: PathBuf,
-    pub install_overrides: bool,
-    pub identifier: ModpackIdentifier,
-}
-
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
-pub enum ModpackIdentifier {
-    CurseForgeModpack(i32),
-    ModrinthModpack(String),
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

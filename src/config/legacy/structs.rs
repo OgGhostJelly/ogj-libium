@@ -1,4 +1,7 @@
-use crate::config::{structs, MigrateError};
+use crate::config::{
+    structs::{self, Filters},
+    MigrateError,
+};
 
 use super::filters::Filter;
 use derive_more::derive::Display;
@@ -36,32 +39,17 @@ pub struct Modpack {
     pub identifier: ModpackIdentifier,
 }
 
-impl From<Modpack> for structs::Modpack {
-    fn from(val: Modpack) -> Self {
-        structs::Modpack {
-            name: val.name,
-            output_dir: val.output_dir,
-            install_overrides: val.install_overrides,
-            identifier: val.identifier.into(),
-        }
-    }
-}
-
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
 pub enum ModpackIdentifier {
     CurseForgeModpack(i32),
     ModrinthModpack(String),
 }
 
-impl From<ModpackIdentifier> for structs::ModpackIdentifier {
+impl From<ModpackIdentifier> for structs::Source {
     fn from(val: ModpackIdentifier) -> Self {
         match val {
-            ModpackIdentifier::CurseForgeModpack(id) => {
-                structs::ModpackIdentifier::CurseForgeModpack(id)
-            }
-            ModpackIdentifier::ModrinthModpack(id) => {
-                structs::ModpackIdentifier::ModrinthModpack(id)
-            }
+            ModpackIdentifier::CurseForgeModpack(id) => Self::curseforge(id, Filters::empty()),
+            ModpackIdentifier::ModrinthModpack(id) => Self::modrinth(id, Filters::empty()),
         }
     }
 }

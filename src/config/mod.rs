@@ -9,7 +9,6 @@ use std::{
     sync::LazyLock,
 };
 
-use structs::ProfileSource;
 use thiserror::Error;
 
 pub static DEFAULT_CONFIG_PATH: LazyLock<PathBuf> = LazyLock::new(|| {
@@ -111,7 +110,7 @@ pub fn migrate_legacy_config(
         let resourcepacks_dir = mods_dir.parent().unwrap_or(empty).join("resourcepacks");
 
         let item = structs::ProfileItem::new(
-            ProfileSource::Embedded(Box::new(profile)),
+            structs::ProfileSource::Embedded(Box::new(profile)),
             name,
             mods_dir,
             shaderpacks_dir,
@@ -121,15 +120,34 @@ pub fn migrate_legacy_config(
         profiles.push(item);
     }
 
+    for legacy_modpack in config.modpacks {
+        let mods_dir = legacy_modpack.output_dir;
+        let shaderpacks_dir = mods_dir.parent().unwrap_or(empty).join("shaderpacks");
+        let resourcepacks_dir = mods_dir.parent().unwrap_or(empty).join("resourcepacks");
+        let source: structs::Source = legacy_modpack.identifier.into();
+
+        let profile = structs::Profile {
+            filters: structs::Filters::empty(),
+            mods: HashMap::new(),
+            shaders: HashMap::new(),
+            modpacks: HashMap::from([(legacy_modpack.name.clone(), source)]),
+            resourcepacks: HashMap::new(),
+        };
+
+        profiles.push(structs::ProfileItem {
+            profile: structs::ProfileSource::Embedded(Box::new(profile)),
+            config: structs::ProfileItemConfig {
+                name: legacy_modpack.name,
+                mods_dir,
+                shaderpacks_dir,
+                resourcepacks_dir,
+            },
+        })
+    }
+
     let config = structs::Config {
         active_profile: config.active_profile,
         profiles,
-        active_modpack: config.active_modpack,
-        modpacks: config
-            .modpacks
-            .into_iter()
-            .map(|modpack| modpack.into())
-            .collect(),
     };
 
     let mut out_config = old_config_path.as_ref().to_path_buf();

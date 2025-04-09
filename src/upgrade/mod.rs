@@ -1,11 +1,9 @@
 pub mod check;
 pub mod mod_downloadable;
-pub mod modpack_downloadable;
 
 use crate::{
     config::structs::{ModLoader, ReleaseChannel, SourceId, SourceKind},
     iter_ext::IterExt as _,
-    modpack::modrinth::structs::ModpackFile as ModpackModFile,
     version_ext::VersionExt,
 };
 use ferinth::structures::{
@@ -197,21 +195,6 @@ pub fn from_mr_version(
             }),
         },
     )
-}
-
-pub fn from_modpack_file(file: ModpackModFile) -> DownloadData {
-    DownloadData {
-        download_url: file
-            .downloads
-            .first()
-            .expect("Download URLs not provided")
-            .clone(),
-        output: file.path,
-        length: file.file_size,
-        dependencies: Vec::new(),
-        conflicts: Vec::new(),
-        kind: None,
-    }
 }
 
 pub fn from_gh_releases(
