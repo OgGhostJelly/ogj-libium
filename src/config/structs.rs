@@ -15,6 +15,7 @@ use std::{
     path::{Path, PathBuf},
     str::FromStr,
 };
+use zip::{result::ZipError, ZipArchive};
 
 use super::{read_profile, write_profile};
 
@@ -576,15 +577,48 @@ impl SourceKind {
         }
     }
 
-    pub fn infer_from_path(path: &Path) -> Option<SourceKind> {
-        if path.ends_with("jar") {
-            Some(SourceKind::Mods)
-        } else if path.ends_with("zip") {
-            Some(SourceKind::Resourcepacks)
+    pub fn infer(path: &Path) -> io::Result<Option<SourceKindWithModpack>> {
+        Ok(if path.extension().is_some_and(|ext| ext == "jar") {
+            Some(SourceKindWithModpack::Mods)
+        } else if path.extension().is_some_and(|ext| ext == "mrpack") {
+            Some(SourceKindWithModpack::ModpackModrinth)
+        } else if path.extension().is_some_and(|ext| ext == "zip") {
+            let mut file = io::BufReader::new(File::open(path)?);
+            let mut archive = ZipArchive::new(&mut file)?;
+
+            if check_exists(&mut archive, "pack.mcmeta")? {
+                Some(SourceKindWithModpack::Resourcepacks)
+            } else if check_exists(&mut archive, "manifest.json")? {
+                Some(SourceKindWithModpack::ModpackCurseforge)
+            } else if check_exists(&mut archive, "shaders/")? {
+                Some(SourceKindWithModpack::Shaders)
+            } else {
+                None
+            }
         } else {
             None
-        }
+        })
     }
+}
+
+pub fn check_exists<R: io::Read + io::Seek>(
+    archive: &mut ZipArchive<R>,
+    name: &str,
+) -> io::Result<bool> {
+    match archive.by_name(name) {
+        Ok(_) => Ok(true),
+        Err(ZipError::FileNotFound) => Ok(false),
+        Err(e) => Err(e.into()),
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum SourceKindWithModpack {
+    Mods,
+    Resourcepacks,
+    Shaders,
+    ModpackModrinth,
+    ModpackCurseforge,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
