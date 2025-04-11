@@ -90,7 +90,7 @@ impl Profile {
         for mod_ in &self.mods {
             if mod_.check_game_version.is_some() || mod_.check_mod_loader.is_some() {
                 eprintln!("WARNING: Check overrides found for {}", mod_.name);
-                eprintln!("Migrate to the new filter system if necessary!");
+                eprintln!("Ensure the profile migrated properly if necessary!");
             }
         }
     }

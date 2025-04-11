@@ -2,7 +2,7 @@ pub mod check;
 pub mod mod_downloadable;
 
 use crate::{
-    config::structs::{ModLoader, ReleaseChannel, SourceId, SourceKind},
+    config::structs::{ModLoader, ReleaseChannel, SourceId, SourceKindWithModpack},
     iter_ext::IterExt as _,
     version_ext::VersionExt,
 };
@@ -58,7 +58,7 @@ pub struct DownloadData {
     /// Other mods this file is incompatible with
     pub conflicts: Vec<SourceId>,
     /// The kind of source file, `None` if the kind is unknown.
-    pub kind: Option<SourceKind>,
+    pub kind: Option<SourceKindWithModpack>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -115,7 +115,7 @@ pub fn try_from_cf_file(
                     }
                 })
                 .collect_vec(),
-            kind: class_id.and_then(SourceKind::from_cf_class_id),
+            kind: class_id.and_then(SourceKindWithModpack::from_cf_class_id),
         },
     ))
 }
@@ -187,12 +187,7 @@ pub fn from_mr_version(
                     }
                 })
                 .collect_vec(),
-            kind: project_type.and_then(|project_type| match project_type {
-                ProjectType::Mod => Some(SourceKind::Mods),
-                ProjectType::Shader => Some(SourceKind::Shaders),
-                ProjectType::ResourcePack => Some(SourceKind::Resourcepacks),
-                _ => None,
-            }),
+            kind: project_type.and_then(SourceKindWithModpack::from_mr_project_type),
         },
     )
 }

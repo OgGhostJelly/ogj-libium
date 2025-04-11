@@ -48,17 +48,6 @@ pub struct ProfileItemConfig {
     pub minecraft_dir: PathBuf,
 }
 
-impl ProfileItemConfig {
-    pub fn output_dir(&self, kind: SourceKind) -> PathBuf {
-        match kind {
-            SourceKind::Mods => self.minecraft_dir.join("mods"),
-            SourceKind::Resourcepacks => self.minecraft_dir.join("resourcepacks"),
-            SourceKind::Shaders => self.minecraft_dir.join("shaderpacks"),
-            SourceKind::Modpacks => self.minecraft_dir.clone(),
-        }
-    }
-}
-
 /// The path to the profile `.toml` file or the profile data itself.
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(untagged)]
@@ -555,49 +544,13 @@ impl SourceKind {
         Self::Modpacks,
     ];
 
-    pub fn from_cf_class_id(class_id: usize) -> Option<SourceKind> {
-        match class_id {
-            12 => Some(SourceKind::Resourcepacks),
-            6 => Some(SourceKind::Mods),
-            6552 => Some(SourceKind::Shaders),
-            4471 => Some(SourceKind::Modpacks),
-            _ => None,
+    pub fn directory(&self, minecraft_dir: &Path) -> Option<PathBuf> {
+        match self {
+            SourceKind::Mods => Some(minecraft_dir.join("mods")),
+            SourceKind::Resourcepacks => Some(minecraft_dir.join("resourcepacks")),
+            SourceKind::Shaders => Some(minecraft_dir.join("shaderpacks")),
+            SourceKind::Modpacks => None,
         }
-    }
-
-    pub fn from_mr_project_type(project_type: ProjectType) -> Option<SourceKind> {
-        match project_type {
-            ProjectType::Project => None,
-            ProjectType::Mod => Some(SourceKind::Mods),
-            ProjectType::Shader => Some(SourceKind::Shaders),
-            ProjectType::Plugin => None,
-            ProjectType::Modpack => Some(SourceKind::Modpacks),
-            ProjectType::Datapack => None,
-            ProjectType::ResourcePack => Some(SourceKind::Resourcepacks),
-        }
-    }
-
-    pub fn infer(path: &Path) -> io::Result<Option<SourceKindWithModpack>> {
-        Ok(if path.extension().is_some_and(|ext| ext == "jar") {
-            Some(SourceKindWithModpack::Mods)
-        } else if path.extension().is_some_and(|ext| ext == "mrpack") {
-            Some(SourceKindWithModpack::ModpackModrinth)
-        } else if path.extension().is_some_and(|ext| ext == "zip") {
-            let mut file = io::BufReader::new(File::open(path)?);
-            let mut archive = ZipArchive::new(&mut file)?;
-
-            if check_exists(&mut archive, "pack.mcmeta")? {
-                Some(SourceKindWithModpack::Resourcepacks)
-            } else if check_exists(&mut archive, "manifest.json")? {
-                Some(SourceKindWithModpack::ModpackCurseforge)
-            } else if check_exists(&mut archive, "shaders/")? {
-                Some(SourceKindWithModpack::Shaders)
-            } else {
-                None
-            }
-        } else {
-            None
-        })
     }
 }
 
@@ -617,8 +570,67 @@ pub enum SourceKindWithModpack {
     Mods,
     Resourcepacks,
     Shaders,
-    ModpackModrinth,
-    ModpackCurseforge,
+    ModpacksModrinth,
+    ModpacksCurseforge,
+}
+
+impl From<SourceKindWithModpack> for SourceKind {
+    fn from(value: SourceKindWithModpack) -> Self {
+        match value {
+            SourceKindWithModpack::Mods => Self::Mods,
+            SourceKindWithModpack::Resourcepacks => Self::Resourcepacks,
+            SourceKindWithModpack::Shaders => Self::Shaders,
+            SourceKindWithModpack::ModpacksModrinth => Self::Modpacks,
+            SourceKindWithModpack::ModpacksCurseforge => Self::Modpacks,
+        }
+    }
+}
+
+impl SourceKindWithModpack {
+    pub fn from_cf_class_id(class_id: usize) -> Option<Self> {
+        match class_id {
+            12 => Some(Self::Resourcepacks),
+            6 => Some(Self::Mods),
+            6552 => Some(Self::Shaders),
+            4471 => Some(Self::ModpacksCurseforge),
+            _ => None,
+        }
+    }
+
+    pub fn from_mr_project_type(project_type: ProjectType) -> Option<Self> {
+        match project_type {
+            ProjectType::Mod => Some(Self::Mods),
+            ProjectType::Shader => Some(Self::Shaders),
+            ProjectType::Modpack => Some(Self::ModpacksModrinth),
+            ProjectType::ResourcePack => Some(Self::Resourcepacks),
+            ProjectType::Project => None,
+            ProjectType::Plugin => None,
+            ProjectType::Datapack => None,
+        }
+    }
+
+    pub fn infer(path: &Path) -> io::Result<Option<SourceKindWithModpack>> {
+        Ok(if path.extension().is_some_and(|ext| ext == "jar") {
+            Some(SourceKindWithModpack::Mods)
+        } else if path.extension().is_some_and(|ext| ext == "mrpack") {
+            Some(SourceKindWithModpack::ModpacksModrinth)
+        } else if path.extension().is_some_and(|ext| ext == "zip") {
+            let mut file = io::BufReader::new(File::open(path)?);
+            let mut archive = ZipArchive::new(&mut file)?;
+
+            if check_exists(&mut archive, "pack.mcmeta")? {
+                Some(SourceKindWithModpack::Resourcepacks)
+            } else if check_exists(&mut archive, "manifest.json")? {
+                Some(SourceKindWithModpack::ModpacksCurseforge)
+            } else if check_exists(&mut archive, "shaders/")? {
+                Some(SourceKindWithModpack::Shaders)
+            } else {
+                None
+            }
+        } else {
+            None
+        })
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]

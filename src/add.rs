@@ -1,5 +1,8 @@
 use crate::{
-    config::structs::{Filters, ModLoader, Profile, ReleaseChannel, Source, SourceId, SourceKind},
+    config::structs::{
+        Filters, ModLoader, Profile, ReleaseChannel, Source, SourceId, SourceKind,
+        SourceKindWithModpack,
+    },
     iter_ext::IterExt as _,
     upgrade::{check, Metadata},
     CURSEFORGE_API, GITHUB_API, MODRINTH_API,
@@ -241,15 +244,16 @@ pub async fn add(
 
     let mut success_names = Vec::new();
 
-    fn to_name(name: &str, kind: Option<SourceKind>) -> String {
+    fn to_name(name: &str, kind: Option<SourceKindWithModpack>) -> String {
         match kind {
             Some(kind) => format!(
                 "{name} ({})",
                 match kind {
-                    SourceKind::Mods => "Mod",
-                    SourceKind::Resourcepacks => "Resourcepack",
-                    SourceKind::Shaders => "Shader",
-                    SourceKind::Modpacks => "Modpack",
+                    SourceKindWithModpack::Mods => "Mod",
+                    SourceKindWithModpack::Resourcepacks => "Resourcepack",
+                    SourceKindWithModpack::Shaders => "Shader",
+                    SourceKindWithModpack::ModpacksCurseforge => "CFModpack",
+                    SourceKindWithModpack::ModpacksModrinth => "MRModpack",
                 },
             ),
             None => name.to_owned(),
@@ -263,7 +267,9 @@ pub async fn add(
 
         let name = to_name(
             &project.name,
-            project.class_id.and_then(SourceKind::from_cf_class_id),
+            project
+                .class_id
+                .and_then(SourceKindWithModpack::from_cf_class_id),
         );
 
         match curseforge(&project, profile, perform_checks, filters.clone()).await {
@@ -287,7 +293,7 @@ pub async fn add(
 
         let name = to_name(
             &project.title,
-            SourceKind::from_mr_project_type(project.project_type.clone()),
+            SourceKindWithModpack::from_mr_project_type(project.project_type.clone()),
         );
 
         match modrinth(&project, profile, perform_checks, filters.clone()).await {
@@ -374,8 +380,9 @@ pub async fn modrinth(
     let source = Source::modrinth(project.id.clone(), filters);
 
     // Add it to the profile
-    let kind = SourceKind::from_mr_project_type(project.project_type.clone())
-        .ok_or(Error::UnsupportedProjectType(project.project_type.clone()))?;
+    let kind = SourceKindWithModpack::from_mr_project_type(project.project_type.clone())
+        .ok_or(Error::UnsupportedProjectType(project.project_type.clone()))?
+        .into();
 
     profile.push(kind, id, source)
 }
@@ -426,8 +433,9 @@ pub async fn curseforge(
         profile.push(
             project
                 .class_id
-                .and_then(SourceKind::from_cf_class_id)
-                .ok_or(Error::UnsupportedClassId(project.class_id))?,
+                .and_then(SourceKindWithModpack::from_cf_class_id)
+                .ok_or(Error::UnsupportedClassId(project.class_id))?
+                .into(),
             project.slug.clone(),
             Source::curseforge(project.id, filters),
         )?;
