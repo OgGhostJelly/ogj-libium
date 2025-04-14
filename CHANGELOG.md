@@ -8,6 +8,7 @@ Restructuring, refactors and breaking changes
 - Added `imports` to `Profile` struct
 - Only store the `.minecraft` dir and find the other folder locations at runtime
 - Made `add` display the project type
+- Switched to kebab-casing
 - Some miscellaneous refactors
 
 ## `ogj-v1.0.0`

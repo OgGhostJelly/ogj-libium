@@ -20,6 +20,7 @@ use zip::{result::ZipError, ZipArchive};
 use super::{read_profile, write_profile};
 
 #[derive(Deserialize, Serialize, Debug, Default)]
+#[serde(rename_all = "kebab-case")]
 pub struct Config {
     #[serde(skip_serializing_if = "is_zero")]
     #[serde(default)]
@@ -31,6 +32,7 @@ pub struct Config {
 }
 
 #[derive(Deserialize, Serialize, Debug)]
+#[serde(rename_all = "kebab-case")]
 pub struct ProfileItem {
     /// The profile source
     // The field used to be called 'path' so its aliased to that for legacy reasons
@@ -41,6 +43,7 @@ pub struct ProfileItem {
 }
 
 #[derive(Deserialize, Serialize, Debug)]
+#[serde(rename_all = "kebab-case")]
 pub struct ProfileItemConfig {
     /// The unique name of the profile.
     pub name: String,
@@ -170,6 +173,7 @@ const fn is_zero(n: &usize) -> bool {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "kebab-case")]
 pub struct Profile {
     #[serde(flatten)]
     pub filters: Filters,
@@ -641,10 +645,11 @@ impl SourceKindWithModpack {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
+#[serde(rename_all = "kebab-case")]
 pub struct Filters {
     #[serde(default, alias = "version", with = "MaybeListOrSingle")]
     pub versions: Option<Vec<Version>>,
-    #[serde(default, alias = "mod_loader", with = "MaybeListOrSingle")]
+    #[serde(default, alias = "mod-loader", with = "MaybeListOrSingle")]
     pub mod_loaders: Option<Vec<ModLoader>>,
     #[serde(default, alias = "release_channel")]
     pub release_channels: Option<Vec<ReleaseChannel>>,
