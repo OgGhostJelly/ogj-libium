@@ -875,7 +875,7 @@ impl Version {
             None
         } else {
             Prerelease::new(&tag[1..])
-                .inspect_err(|e| println!("WARN: semver tag parse error: {e}"))
+                .inspect_err(|e| eprintln!("WARN: semver tag parse error: {e}"))
                 .ok()
         };
 
@@ -894,7 +894,9 @@ impl Version {
         let (patch, rest) = find_split(rest);
 
         if !rest.is_empty() {
-            println!("WARN: semver parse error ({s:?}): unexpected eof, discarded data ({rest:?})");
+            eprintln!(
+                "WARN: semver parse error ({s:?}): unexpected eof, discarded data ({rest:?})"
+            );
         }
 
         fn parse_part(s: &str) -> u64 {
