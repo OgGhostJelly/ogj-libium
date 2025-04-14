@@ -544,13 +544,13 @@ impl SourceKind {
         Self::Modpacks,
     ];
 
-    pub fn directory(&self, minecraft_dir: &Path) -> Option<PathBuf> {
-        match self {
-            SourceKind::Mods => Some(minecraft_dir.join("mods")),
-            SourceKind::Resourcepacks => Some(minecraft_dir.join("resourcepacks")),
-            SourceKind::Shaders => Some(minecraft_dir.join("shaderpacks")),
-            SourceKind::Modpacks => None,
-        }
+    pub fn directory(&self) -> &'static Path {
+        Path::new(match self {
+            SourceKind::Mods => "mods",
+            SourceKind::Resourcepacks => "resourcepacks",
+            SourceKind::Shaders => "shaderpacks",
+            SourceKind::Modpacks => "",
+        })
     }
 }
 
@@ -587,6 +587,10 @@ impl From<SourceKindWithModpack> for SourceKind {
 }
 
 impl SourceKindWithModpack {
+    pub fn to_kind(self) -> SourceKind {
+        self.into()
+    }
+
     pub fn from_cf_class_id(class_id: usize) -> Option<Self> {
         match class_id {
             12 => Some(Self::Resourcepacks),
@@ -647,6 +651,8 @@ pub struct Filters {
     pub title: Option<Regex>,
     #[serde(default)]
     pub description: Option<Regex>,
+    #[serde(default)]
+    pub install_overrides: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -718,6 +724,10 @@ impl Filters {
             filename: concat_regex(self.filename, other.filename),
             title: concat_regex(self.title, other.title),
             description: concat_regex(self.description, other.description),
+            install_overrides: match (self.install_overrides, other.install_overrides) {
+                (None, None) => None,
+                (None, Some(val)) | (Some(val), None) | (Some(_), Some(val)) => Some(val),
+            },
         }
     }
 

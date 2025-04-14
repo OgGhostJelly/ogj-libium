@@ -5,7 +5,7 @@ use super::{
     DownloadData,
 };
 use crate::{
-    config::structs::{Filters, Source, SourceId},
+    config::structs::{Filters, Source, SourceId, SourceKind},
     iter_ext::IterExt as _,
     upgrade::from_gh_asset,
     CURSEFORGE_API, GITHUB_API, MODRINTH_API,
@@ -31,10 +31,14 @@ pub enum Error {
 type Result<T> = std::result::Result<T, Error>;
 
 impl Source {
-    pub async fn fetch_download_file(&self, filters: Vec<&Filters>) -> Result<DownloadData> {
+    pub async fn fetch_download_file(
+        &self,
+        kind: SourceKind,
+        filters: Vec<&Filters>,
+    ) -> Result<DownloadData> {
         let mut download_files = vec![];
         let _ = self.each_sources(filters, |filters, id| {
-            download_files.push(id.fetch_download_file(filters));
+            download_files.push(id.fetch_download_file(kind, filters));
         });
 
         for file in join_all(download_files).await {
@@ -50,7 +54,11 @@ impl Source {
 }
 
 impl SourceId {
-    pub async fn fetch_download_file(&self, filters: Vec<&Filters>) -> Result<DownloadData> {
+    pub async fn fetch_download_file(
+        &self,
+        kind: SourceKind,
+        filters: Vec<&Filters>,
+    ) -> Result<DownloadData> {
         let download_files = match self {
             SourceId::Curseforge(id) => {
                 let (files, mod_) = join(
@@ -63,7 +71,7 @@ impl SourceId {
                 files.sort_unstable_by_key(|f| Reverse(f.file_date));
                 files
                     .into_iter()
-                    .map(|f| try_from_cf_file(f, mod_.class_id).map_err(Into::into))
+                    .map(|f| try_from_cf_file(kind, f, mod_.class_id).map_err(Into::into))
                     .collect::<Result<Vec<_>>>()?
             }
             SourceId::Modrinth(id) => {
@@ -73,7 +81,9 @@ impl SourceId {
                     .list_versions(id)
                     .await?
                     .into_iter()
-                    .map(|version| from_mr_version(version, Some(project.project_type.clone())))
+                    .map(|version| {
+                        from_mr_version(kind, version, Some(project.project_type.clone()))
+                    })
                     .collect_vec()
             }
             SourceId::Github(owner, repo) => GITHUB_API
@@ -82,7 +92,7 @@ impl SourceId {
                 .list()
                 .send()
                 .await
-                .map(|r| from_gh_releases(r.items))?,
+                .map(|r| from_gh_releases(kind, r.items))?,
             SourceId::PinnedCurseforge(mod_id, pin) => {
                 let (mod_file, mod_) = join(
                     CURSEFORGE_API.get_mod_file(*mod_id, *pin),
@@ -91,7 +101,7 @@ impl SourceId {
                 .await;
                 let (mod_file, mod_) = (mod_file?, mod_?);
 
-                let cf = try_from_cf_file(mod_file, mod_.class_id)?;
+                let cf = try_from_cf_file(kind, mod_file, mod_.class_id)?;
                 return Ok(cf.1);
             }
             SourceId::PinnedModrinth(id, pin) => {
@@ -99,11 +109,12 @@ impl SourceId {
                     join(MODRINTH_API.get_version(pin), MODRINTH_API.get_project(id)).await;
                 let (mr_version, mr_project) = (mr_version?, mr_project?);
 
-                let mr = from_mr_version(mr_version, Some(mr_project.project_type));
+                let mr = from_mr_version(kind, mr_version, Some(mr_project.project_type));
                 return Ok(mr.1);
             }
             SourceId::PinnedGithub((owner, repo), pin) => {
                 return Ok(from_gh_asset(
+                    kind,
                     GITHUB_API
                         .repos(owner, repo)
                         .release_assets()

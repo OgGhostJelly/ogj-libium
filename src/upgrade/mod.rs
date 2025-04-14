@@ -2,7 +2,10 @@ pub mod check;
 pub mod mod_downloadable;
 
 use crate::{
-    config::structs::{ModLoader, ReleaseChannel, SourceId, SourceKindWithModpack},
+    config::{
+        modpack::modrinth,
+        structs::{ModLoader, ReleaseChannel, SourceId, SourceKind, SourceKindWithModpack},
+    },
     iter_ext::IterExt as _,
     version_ext::VersionExt,
 };
@@ -67,6 +70,7 @@ pub struct DownloadData {
 pub struct DistributionDeniedError(pub i32, pub i32);
 
 pub fn try_from_cf_file(
+    kind: SourceKind,
     file: CFFile,
     class_id: Option<usize>,
 ) -> std::result::Result<(Metadata, DownloadData), DistributionDeniedError> {
@@ -91,7 +95,7 @@ pub fn try_from_cf_file(
             download_url: file
                 .download_url
                 .ok_or(DistributionDeniedError(file.mod_id, file.id))?,
-            output: file.file_name.as_str().into(),
+            output: kind.directory().join(file.file_name.as_str()),
             length: file.file_length,
             dependencies: file
                 .dependencies
@@ -121,6 +125,7 @@ pub fn try_from_cf_file(
 }
 
 pub fn from_mr_version(
+    kind: SourceKind,
     version: MRVersion,
     project_type: Option<ProjectType>,
 ) -> (Metadata, DownloadData) {
@@ -144,7 +149,9 @@ pub fn from_mr_version(
         },
         DownloadData {
             download_url: version.get_version_file().url.clone(),
-            output: version.get_version_file().filename.as_str().into(),
+            output: kind
+                .directory()
+                .join(version.get_version_file().filename.as_str()),
             length: version.get_version_file().size,
             dependencies: version
                 .dependencies
@@ -157,10 +164,7 @@ pub fn from_mr_version(
                                 Some(SourceId::PinnedModrinth(proj_id, ver_id))
                             }
                             (Some(proj_id), None) => Some(SourceId::Modrinth(proj_id)),
-                            _ => {
-                                eprintln!("Project ID not available");
-                                None
-                            }
+                            _ => None,
                         }
                     } else {
                         None
@@ -177,10 +181,7 @@ pub fn from_mr_version(
                                 Some(SourceId::PinnedModrinth(proj_id, ver_id))
                             }
                             (Some(proj_id), None) => Some(SourceId::Modrinth(proj_id)),
-                            _ => {
-                                eprintln!("Project ID not available");
-                                None
-                            }
+                            _ => None,
                         }
                     } else {
                         None
@@ -193,6 +194,7 @@ pub fn from_mr_version(
 }
 
 pub fn from_gh_releases(
+    kind: SourceKind,
     releases: impl IntoIterator<Item = GHRelease>,
 ) -> Vec<(Metadata, DownloadData)> {
     releases
@@ -225,7 +227,7 @@ pub fn from_gh_releases(
                     },
                     DownloadData {
                         download_url: asset.browser_download_url,
-                        output: asset.name.into(),
+                        output: kind.directory().join(asset.name),
                         length: asset.size as usize,
                         dependencies: Vec::new(),
                         conflicts: Vec::new(),
@@ -237,11 +239,26 @@ pub fn from_gh_releases(
         .collect_vec()
 }
 
-pub fn from_gh_asset(asset: GHAsset) -> DownloadData {
+pub fn from_gh_asset(kind: SourceKind, asset: GHAsset) -> DownloadData {
     DownloadData {
         download_url: asset.browser_download_url,
-        output: asset.name.into(),
+        output: kind.directory().join(asset.name),
         length: asset.size as usize,
+        dependencies: Vec::new(),
+        conflicts: Vec::new(),
+        kind: None,
+    }
+}
+
+pub fn from_modpack_file(file: modrinth::ModpackFile) -> DownloadData {
+    DownloadData {
+        download_url: file
+            .downloads
+            .first()
+            .expect("Download URLs not provided")
+            .clone(),
+        output: file.path,
+        length: file.file_size,
         dependencies: Vec::new(),
         conflicts: Vec::new(),
         kind: None,

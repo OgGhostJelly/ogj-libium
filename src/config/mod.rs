@@ -1,4 +1,5 @@
 mod legacy;
+pub mod modpack;
 pub mod structs;
 
 use std::{
