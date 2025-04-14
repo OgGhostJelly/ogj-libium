@@ -93,6 +93,7 @@ pub fn migrate_legacy_config(
 
         let profile = structs::Profile {
             filters: legacy::migrate_filters(filters)?,
+            imports: Vec::new(),
             mods: {
                 let mut mods = HashMap::new();
                 for mod_ in legacy_mods {
@@ -127,6 +128,7 @@ pub fn migrate_legacy_config(
 
         let profile = structs::Profile {
             filters: structs::Filters::empty(),
+            imports: Vec::new(),
             mods: HashMap::new(),
             shaders: HashMap::new(),
             modpacks: HashMap::from([(legacy_modpack.name.clone(), source)]),
