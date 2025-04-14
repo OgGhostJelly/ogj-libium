@@ -4,7 +4,7 @@
 
 Restructuring, refactors and breaking changes
 
-- Support for embedded profiles
+- Added embedded profiles
 - Only store the `.minecraft` dir and find the other folder locations at runtime
 - Made `add` display the project type
 - Some miscellaneous refactors
