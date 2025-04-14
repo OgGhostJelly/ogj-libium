@@ -179,6 +179,8 @@ pub struct Profile {
     pub filters: Filters,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub imports: Vec<PathBuf>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub overrides: Option<PathBuf>,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub mods: HashMap<String, Source>,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
@@ -204,6 +206,7 @@ impl Profile {
                 ..Filters::empty()
             },
             imports: Vec::new(),
+            overrides: None,
             mods: HashMap::new(),
             shaders: HashMap::new(),
             modpacks: HashMap::new(),

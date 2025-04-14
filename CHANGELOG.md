@@ -5,7 +5,7 @@
 Restructuring, refactors and breaking changes
 
 - Added embedded profiles
-- Added `imports` to `Profile` struct
+- Added `imports` and `overrides` to `Profile` struct
 - Only store the `.minecraft` dir and find the other folder locations at runtime
 - Made `add` display the project type
 - Switched to kebab-casing
