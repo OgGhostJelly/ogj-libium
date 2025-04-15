@@ -1,6 +1,6 @@
 # Changelog for Libium
 
-## `ogj-v2.0.0` (In Progress)
+## `ogj-v2.0.0-alpha`
 
 Restructuring, refactors and breaking changes
 
