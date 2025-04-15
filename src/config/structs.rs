@@ -17,7 +17,7 @@ use std::{
 };
 use zip::{result::ZipError, ZipArchive};
 
-use super::{read_profile, write_profile};
+use super::{options::OptionsOverrides, read_profile, write_profile};
 
 #[derive(Deserialize, Serialize, Debug, Default)]
 #[serde(rename_all = "kebab-case")]
@@ -179,6 +179,8 @@ pub struct Profile {
     pub filters: Filters,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub imports: Vec<PathBuf>,
+    #[serde(default, skip_serializing_if = "OptionsOverrides::is_empty")]
+    pub options: OptionsOverrides,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub overrides: Option<PathBuf>,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
@@ -206,6 +208,7 @@ impl Profile {
                 ..Filters::empty()
             },
             imports: Vec::new(),
+            options: OptionsOverrides::default(),
             overrides: None,
             mods: HashMap::new(),
             shaders: HashMap::new(),

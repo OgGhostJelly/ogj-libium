@@ -6,6 +6,7 @@ Restructuring, refactors and breaking changes
 
 - Added embedded profiles
 - Added `imports` and `overrides` to `Profile` struct
+- Added structs for handling `.minecraft/options.txt` and keybinds in the `options` module.
 - Only store the `.minecraft` dir and find the other folder locations at runtime
 - Made `add` display the project type
 - Switched to kebab-casing

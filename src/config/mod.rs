@@ -1,5 +1,6 @@
 mod legacy;
 pub mod modpack;
+pub mod options;
 pub mod structs;
 
 use std::{
@@ -10,6 +11,7 @@ use std::{
     sync::LazyLock,
 };
 
+use options::OptionsOverrides;
 use thiserror::Error;
 
 pub static DEFAULT_CONFIG_PATH: LazyLock<PathBuf> = LazyLock::new(|| {
@@ -94,6 +96,7 @@ pub fn migrate_legacy_config(
         let profile = structs::Profile {
             filters: legacy::migrate_filters(filters)?,
             imports: Vec::new(),
+            options: OptionsOverrides::default(),
             overrides: None,
             mods: {
                 let mut mods = HashMap::new();
@@ -130,6 +133,7 @@ pub fn migrate_legacy_config(
         let profile = structs::Profile {
             filters: structs::Filters::empty(),
             imports: Vec::new(),
+            options: OptionsOverrides::default(),
             overrides: None,
             mods: HashMap::new(),
             shaders: HashMap::new(),
