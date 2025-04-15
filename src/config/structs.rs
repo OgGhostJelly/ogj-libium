@@ -657,7 +657,7 @@ pub struct Filters {
     pub versions: Option<Vec<Version>>,
     #[serde(default, alias = "mod-loader", with = "MaybeListOrSingle")]
     pub mod_loaders: Option<Vec<ModLoader>>,
-    #[serde(default, alias = "release_channel")]
+    #[serde(default, alias = "release-channel")]
     pub release_channels: Option<Vec<ReleaseChannel>>,
     #[serde(default)]
     pub filename: Option<Regex>,
@@ -933,6 +933,13 @@ impl Version {
         };
 
         self.0.matches(&version)
+    }
+
+    pub fn is_strict(&self) -> bool {
+        self.0
+            .comparators
+            .iter()
+            .any(|comp| matches!(comp.op, semver::Op::Exact) && comp.minor.is_some())
     }
 
     pub fn into_req(self) -> semver::VersionReq {
