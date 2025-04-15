@@ -182,7 +182,7 @@ pub struct Profile {
     #[serde(default, skip_serializing_if = "OptionsOverrides::is_empty")]
     pub options: OptionsOverrides,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub overrides: Option<PathBuf>,
+    pub overrides: Option<Overrides>,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub mods: HashMap<String, Source>,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
@@ -191,6 +191,38 @@ pub struct Profile {
     pub modpacks: HashMap<String, Source>,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub resourcepacks: HashMap<String, Source>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(untagged, rename_all = "kebab-case")]
+pub enum Overrides {
+    Directory(PathBuf),
+    Expanded {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        path: Option<PathBuf>,
+        #[serde(flatten, default, skip_serializing_if = "HashMap::is_empty")]
+        files: HashMap<PathBuf, String>,
+    },
+}
+
+impl Profile {
+    pub fn overrides_path(&self) -> Option<&Path> {
+        self.overrides
+            .as_ref()
+            .and_then(|overrides| match overrides {
+                Overrides::Directory(path) => Some(path.as_path()),
+                Overrides::Expanded { path, .. } => path.as_deref(),
+            })
+    }
+
+    pub fn overrides_files(&self) -> Option<&HashMap<PathBuf, String>> {
+        self.overrides
+            .as_ref()
+            .and_then(|overrides| match overrides {
+                Overrides::Directory(_) => None,
+                Overrides::Expanded { files, .. } => Some(files),
+            })
+    }
 }
 
 impl Profile {
