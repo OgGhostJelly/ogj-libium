@@ -222,6 +222,7 @@ pub async fn add(
                                         game_versions: asset
                                             .name
                                             .trim_end_matches(".jar")
+                                            .trim_end_matches(".zip")
                                             .split(['-', '_', '+'])
                                             .map(|s| s.trim_start_matches("mc"))
                                             .map(ToOwned::to_owned)
@@ -229,6 +230,7 @@ pub async fn add(
                                         loaders: asset
                                             .name
                                             .trim_end_matches(".jar")
+                                            .trim_end_matches(".zip")
                                             .split(['-', '_', '+'])
                                             .filter_map(|s| ModLoader::from_str(s).ok())
                                             .collect_vec(),

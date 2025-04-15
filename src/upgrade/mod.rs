@@ -213,26 +213,22 @@ pub fn from_gh_releases(
                         game_versions: asset
                             .name
                             .trim_end_matches(".jar")
+                            .trim_end_matches(".zip")
                             .split(['-', '_', '+'])
                             .map(|s| s.trim_start_matches("mc"))
+                            .filter(|s| semver::Version::from_str(s).is_ok())
                             .map(ToOwned::to_owned)
                             .collect_vec(),
                         loaders: asset
                             .name
                             .trim_end_matches(".jar")
+                            .trim_end_matches(".zip")
                             .split(['-', '_', '+'])
                             .filter_map(|s| ModLoader::from_str(s).ok())
                             .collect_vec(),
                         filename: asset.name.clone(),
                     },
-                    DownloadData {
-                        download_url: asset.browser_download_url,
-                        output: kind.directory().join(asset.name),
-                        length: asset.size as usize,
-                        dependencies: Vec::new(),
-                        conflicts: Vec::new(),
-                        kind: None,
-                    },
+                    from_gh_asset(kind, asset),
                 )
             })
         })
