@@ -424,6 +424,7 @@ pub enum SourceId {
     Curseforge(i32),
     Modrinth(String),
     Github(String, String),
+    File(PathBuf),
 
     PinnedCurseforge(i32, i32),
     PinnedModrinth(String, String),
@@ -436,6 +437,7 @@ impl fmt::Display for SourceId {
             SourceId::Curseforge(id) => write!(f, "cf:{id}"),
             SourceId::Modrinth(id) => write!(f, "mr:{id}"),
             SourceId::Github(owner, repo) => write!(f, "gh:{owner}/{repo}"),
+            SourceId::File(file) => write!(f, "file:{}", file.display()),
             SourceId::PinnedCurseforge(id, pin) => write!(f, "cf:{id}*{pin}"),
             SourceId::PinnedModrinth(id, pin) => write!(f, "mr:{id}*{pin}"),
             SourceId::PinnedGithub((owner, repo), pin) => write!(f, "gh:{owner}/{repo}*{pin}"),
@@ -474,25 +476,19 @@ impl<'de> Visitor<'de> for SourceTagVisitor {
     where
         E: serde::de::Error,
     {
-        let Some(index) = v.find(':') else {
+        let Some((tag, id)) = v.split_once(':') else {
             return Err(E::custom(format!(
                 "missing `:` separator in source tag {v:?}"
             )));
         };
-
-        let (tag, id) = v.split_at(index);
-        let id = &id[1..];
 
         fn parse_with_pin<'inp, Id, Pin>(
             inp: &'inp str,
             f_id: impl Fn(&'inp str) -> Id,
             f_pin: impl Fn(&'inp str) -> Pin,
         ) -> (Id, Option<Pin>) {
-            match inp.rfind('*') {
-                Some(index) => {
-                    let (id, pin) = inp.split_at(index);
-                    (f_id(id), Some(f_pin(&pin[1..])))
-                }
+            match inp.rsplit_once('*') {
+                Some((id, pin)) => (f_id(id), Some(f_pin(pin))),
                 None => (f_id(inp), None),
             }
         }
@@ -507,6 +503,7 @@ impl<'de> Visitor<'de> for SourceTagVisitor {
                 (id, None) => Ok(SourceId::Modrinth(id.to_owned())),
                 (id, Some(pin)) => Ok(SourceId::PinnedModrinth(id.to_owned(), pin.to_owned())),
             },
+            "file" => Ok(SourceId::File(id.into())),
             "gh" | "github" => {
                 let parsed = parse_with_pin(
                     id,
@@ -589,13 +586,17 @@ impl SourceKind {
         Self::Modpacks,
     ];
 
+    pub fn dirname(&self) -> Option<&'static str> {
+        match self {
+            SourceKind::Mods => Some("mods"),
+            SourceKind::Resourcepacks => Some("resourcepacks"),
+            SourceKind::Shaders => Some("shaderpacks"),
+            SourceKind::Modpacks => None,
+        }
+    }
+
     pub fn directory(&self) -> &'static Path {
-        Path::new(match self {
-            SourceKind::Mods => "mods",
-            SourceKind::Resourcepacks => "resourcepacks",
-            SourceKind::Shaders => "shaderpacks",
-            SourceKind::Modpacks => "",
-        })
+        Path::new(self.dirname().unwrap_or(""))
     }
 }
 

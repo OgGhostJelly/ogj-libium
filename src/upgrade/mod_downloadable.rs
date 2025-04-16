@@ -1,7 +1,7 @@
 use futures_util::future::{join, join_all};
 
 use super::{
-    check, from_gh_releases, from_mr_version, try_from_cf_file, DistributionDeniedError,
+    check, from_file, from_gh_releases, from_mr_version, try_from_cf_file, DistributionDeniedError,
     DownloadData,
 };
 use crate::{
@@ -10,7 +10,7 @@ use crate::{
     upgrade::from_gh_asset,
     CURSEFORGE_API, GITHUB_API, MODRINTH_API,
 };
-use std::cmp::Reverse;
+use std::{cmp::Reverse, path::Path};
 
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]
@@ -27,18 +27,23 @@ pub enum Error {
     GitHubError(#[from] octocrab::Error),
     #[error("No compatible mod sources found")]
     NoCompatibleSources,
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    #[error("'file:' cannot be used in an embedded profile")]
+    CantUseFileSource,
 }
 type Result<T> = std::result::Result<T, Error>;
 
 impl Source {
     pub async fn fetch_download_file(
         &self,
+        src_path: Option<&Path>,
         kind: SourceKind,
         filters: Vec<&Filters>,
     ) -> Result<DownloadData> {
         let mut download_files = vec![];
         let _ = self.each_sources(filters, |filters, id| {
-            download_files.push(id.fetch_download_file(kind, filters));
+            download_files.push(id.fetch_download_file(src_path, kind, filters));
         });
 
         for file in join_all(download_files).await {
@@ -56,6 +61,7 @@ impl Source {
 impl SourceId {
     pub async fn fetch_download_file(
         &self,
+        src_path: Option<&Path>,
         kind: SourceKind,
         filters: Vec<&Filters>,
     ) -> Result<DownloadData> {
@@ -93,6 +99,10 @@ impl SourceId {
                 .send()
                 .await
                 .map(|r| from_gh_releases(kind, r.items))?,
+            SourceId::File(path) => match src_path {
+                Some(src_path) => vec![from_file(kind, src_path, path)?],
+                None => return Err(Error::CantUseFileSource),
+            },
             SourceId::PinnedCurseforge(mod_id, pin) => {
                 let (mod_file, mod_) = join(
                     CURSEFORGE_API.get_mod_file(*mod_id, *pin),

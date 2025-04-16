@@ -1,5 +1,13 @@
 # Changelog for Libium
 
+## `ogj-v2.0.2-alpha`
+
+API breaking changes
+
+- Added `SourceId::File`
+- Multiple sources in `DownloadData`
+- Added `dirname` method in `SourceKind`
+
 ## `ogj-v2.0.1-alpha`
 
 - Fix invalid string quotes in `options.txt`

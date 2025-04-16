@@ -19,8 +19,9 @@ use furse::structures::file_structs::{
 use octocrab::models::repos::{Asset as GHAsset, Release as GHRelease};
 use reqwest::{Client, Url};
 use std::{
-    fs::{create_dir_all, rename, OpenOptions},
-    io::{BufWriter, Write},
+    ffi::OsStr,
+    fs::{self, create_dir_all, rename, File, OpenOptions},
+    io::{self, BufWriter, Write},
     path::{Path, PathBuf},
     str::FromStr,
 };
@@ -47,21 +48,30 @@ pub struct Metadata {
     pub loaders: Vec<ModLoader>,
 }
 
+/// Downloadable data from a source on the internet.
 #[derive(Debug, Clone)]
 pub struct DownloadData {
-    pub download_url: Url,
+    pub src: DownloadSource,
     /// The path of the downloaded file relative to the output directory
     ///
     /// The filename by default, but can be configured with subdirectories for modpacks.
     pub output: PathBuf,
     /// The length of the file in bytes
-    pub length: usize,
+    pub length: u64,
     /// The dependencies this file has
     pub dependencies: Vec<SourceId>,
     /// Other mods this file is incompatible with
     pub conflicts: Vec<SourceId>,
     /// The kind of source file, `None` if the kind is unknown.
     pub kind: Option<SourceKindWithModpack>,
+}
+
+/// Installable data from the users filesystem.
+#[derive(Debug, Clone)]
+pub enum DownloadSource {
+    Url(Url),
+    Contents(String),
+    Path(PathBuf),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -92,11 +102,12 @@ pub fn try_from_cf_file(
             game_versions: file.game_versions,
         },
         DownloadData {
-            download_url: file
-                .download_url
-                .ok_or(DistributionDeniedError(file.mod_id, file.id))?,
+            src: DownloadSource::Url(
+                file.download_url
+                    .ok_or(DistributionDeniedError(file.mod_id, file.id))?,
+            ),
             output: kind.directory().join(file.file_name.as_str()),
-            length: file.file_length,
+            length: file.file_length as u64,
             dependencies: file
                 .dependencies
                 .iter()
@@ -148,11 +159,11 @@ pub fn from_mr_version(
             game_versions: version.game_versions.clone(),
         },
         DownloadData {
-            download_url: version.get_version_file().url.clone(),
+            src: DownloadSource::Url(version.get_version_file().url.clone()),
             output: kind
                 .directory()
                 .join(version.get_version_file().filename.as_str()),
-            length: version.get_version_file().size,
+            length: version.get_version_file().size as u64,
             dependencies: version
                 .dependencies
                 .clone()
@@ -237,24 +248,66 @@ pub fn from_gh_releases(
 
 pub fn from_gh_asset(kind: SourceKind, asset: GHAsset) -> DownloadData {
     DownloadData {
-        download_url: asset.browser_download_url,
+        src: DownloadSource::Url(asset.browser_download_url),
         output: kind.directory().join(asset.name),
-        length: asset.size as usize,
+        length: asset.size as u64,
         dependencies: Vec::new(),
         conflicts: Vec::new(),
         kind: None,
     }
 }
 
+pub fn from_file(
+    kind: SourceKind,
+    src_path: &Path,
+    path: &Path,
+) -> std::result::Result<(Metadata, DownloadData), io::Error> {
+    let path = src_path.join(path);
+
+    let length = File::open(&path)?.metadata()?.len();
+    let filename = path.file_name().unwrap_or(OsStr::new("")).to_os_string();
+    let output = kind.directory().join(&filename);
+    let inferred_kind = SourceKindWithModpack::infer(&path)?;
+
+    Ok((
+        Metadata {
+            title: {
+                let s = filename.to_string_lossy();
+                match s.find('.') {
+                    Some(i) => s[i + 1..].to_string(),
+                    None => s.to_string(),
+                }
+            },
+            description: format!("File at path {}", path.display()),
+            filename: filename
+                .to_str()
+                .map(ToString::to_string)
+                .expect("Filename has invalid unicode"),
+            channel: ReleaseChannel::Release,
+            game_versions: vec![],
+            loaders: vec![],
+        },
+        DownloadData {
+            src: DownloadSource::Path(path),
+            output,
+            length,
+            dependencies: vec![],
+            conflicts: vec![],
+            kind: inferred_kind,
+        },
+    ))
+}
+
 pub fn from_modpack_file(file: modrinth::ModpackFile) -> DownloadData {
     DownloadData {
-        download_url: file
-            .downloads
-            .first()
-            .expect("Download URLs not provided")
-            .clone(),
+        src: DownloadSource::Url(
+            file.downloads
+                .first()
+                .expect("Download URLs not provided")
+                .clone(),
+        ),
         output: file.path,
-        length: file.file_size,
+        length: file.file_size as u64,
         dependencies: Vec::new(),
         conflicts: Vec::new(),
         kind: None,
@@ -273,7 +326,7 @@ impl DownloadData {
         output_dir: impl AsRef<Path>,
         update: impl Fn(usize) + Send,
     ) -> Result<(usize, String)> {
-        let (filename, url, size) = (self.filename(), self.download_url, self.length);
+        let (filename, src, size) = (self.filename(), self.src, self.length);
         let out_file_path = output_dir.as_ref().join(&self.output);
         let temp_file_path = out_file_path.with_extension("part");
         if let Some(up_dir) = out_file_path.parent() {
@@ -281,22 +334,35 @@ impl DownloadData {
         }
 
         let mut temp_file = BufWriter::with_capacity(
-            size,
+            size as usize,
             OpenOptions::new()
                 .append(true)
                 .create(true)
                 .open(&temp_file_path)?,
         );
 
-        let mut response = client.get(url).send().await?;
+        match src {
+            DownloadSource::Url(url) => {
+                let mut response = client.get(url).send().await?;
+                while let Some(chunk) = response.chunk().await? {
+                    temp_file.write_all(&chunk)?;
+                    update(chunk.len());
+                }
+            }
+            DownloadSource::Contents(data) => {
+                let data = data.as_bytes();
+                temp_file.write_all(data)?;
+                update(data.len());
+            }
+            DownloadSource::Path(path) => {
+                let bytes = fs::copy(&path, &temp_file_path)?;
+                update(bytes as usize);
+            }
+        };
 
-        while let Some(chunk) = response.chunk().await? {
-            temp_file.write_all(&chunk)?;
-            update(chunk.len());
-        }
         temp_file.flush()?;
         rename(temp_file_path, out_file_path)?;
-        Ok((size, filename))
+        Ok((size as usize, filename))
     }
 
     pub fn filename(&self) -> String {
