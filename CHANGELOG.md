@@ -1,5 +1,9 @@
 # Changelog for Libium
 
+## `ogj-v2.0.1-alpha`
+
+- Fix invalid string quotes in `options.txt`
+
 ## `ogj-v2.0.0-alpha`
 
 Restructuring, refactors and breaking changes

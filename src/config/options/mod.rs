@@ -68,6 +68,8 @@ impl Options {
         iter.sort();
 
         for (key, value) in iter {
+            // Remove string quotes since that breaks the options file for some reason.
+            let value = value.trim_matches('"');
             writeln!(write, "{key}:{value}")?;
         }
         Ok(())
