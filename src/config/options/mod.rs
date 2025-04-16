@@ -69,7 +69,12 @@ impl Options {
 
         for (key, value) in iter {
             // Remove string quotes since that breaks the options file for some reason.
-            let value = value.trim_matches('"');
+            let value = if value.starts_with('"') && value.ends_with('"') {
+                &value[1..value.len() - 1]
+            } else {
+                value
+            };
+
             writeln!(write, "{key}:{value}")?;
         }
         Ok(())
