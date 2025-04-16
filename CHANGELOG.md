@@ -3,6 +3,7 @@
 ## `ogj-v2.0.1-alpha`
 
 - Fix invalid string quotes in `options.txt`
+- Fix don't create the unused `profiles` directory when migrating
 
 ## `ogj-v2.0.0-alpha`
 

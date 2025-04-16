@@ -71,16 +71,7 @@ pub fn migrate_legacy_config(
     old_config_path: impl AsRef<Path>,
 ) -> std::result::Result<(), MigrateError> {
     let empty: &Path = Path::new("");
-
-    let dir = old_config_path
-        .as_ref()
-        .parent()
-        .unwrap_or(empty)
-        .canonicalize()?;
-    let profiles_dir = dir.join("profiles");
     let config = legacy::read_config(old_config_path.as_ref())?;
-
-    create_dir_all(&profiles_dir)?;
 
     let mut profiles = vec![];
 
