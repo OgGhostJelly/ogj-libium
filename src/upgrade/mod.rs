@@ -4,10 +4,14 @@ pub mod mod_downloadable;
 use crate::{
     config::{
         modpack::modrinth,
-        structs::{ModLoader, ReleaseChannel, SourceId, SourceKind, SourceKindWithModpack},
+        structs::{
+            ModLoader, ProfileImport, ProfileImportSource, ReleaseChannel, SourceId, SourceKind,
+            SourceKindWithModpack,
+        },
     },
     iter_ext::IterExt as _,
     version_ext::VersionExt,
+    TMP_DIR,
 };
 use ferinth::structures::{
     project::ProjectType,
@@ -498,4 +502,41 @@ pub fn calculate_sha512(path: &Path) -> std::result::Result<String, io::Error> {
     let mut hasher = sha2::Sha512::new();
     io::copy(&mut File::open(path)?, &mut hasher)?;
     Ok(base16ct::lower::encode_string(&hasher.finalize()))
+}
+
+impl ProfileImport {
+    pub async fn download(&self) -> Result<PathBuf> {
+        match self {
+            ProfileImport::Short(src) => src.download().await,
+            ProfileImport::Long { src, rev } => {
+                let path = src.download().await?;
+                let hash = calculate_sha512(&path)?;
+                if !hash.starts_with(rev) {
+                    return Err(Error::UnexpectedFileHash(rev.clone(), hash));
+                }
+                Ok(path)
+            }
+        }
+    }
+}
+
+impl ProfileImportSource {
+    pub async fn download(&self) -> Result<PathBuf> {
+        match self {
+            ProfileImportSource::Path(path) => Ok(path.clone()),
+            ProfileImportSource::Url(url) => {
+                let path = url.path();
+                let (_, filename) = path.split_once('/').unwrap_or(("", path));
+                let temp_file_path = TMP_DIR.join(filename);
+
+                let mut temp_file = File::create(&temp_file_path)?;
+                let mut response = reqwest::get(url.clone()).await?;
+                while let Some(chunk) = response.chunk().await? {
+                    temp_file.write_all(&chunk)?;
+                }
+
+                Ok(temp_file_path)
+            }
+        }
+    }
 }

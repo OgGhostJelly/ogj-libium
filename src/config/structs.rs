@@ -179,7 +179,7 @@ pub struct Profile {
     #[serde(flatten)]
     pub filters: Filters,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub imports: Vec<PathBuf>,
+    pub imports: Vec<ProfileImport>,
     #[serde(default, skip_serializing_if = "OptionsOverrides::is_empty")]
     pub options: OptionsOverrides,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -192,6 +192,24 @@ pub struct Profile {
     pub modpacks: HashMap<String, Source>,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub resourcepacks: HashMap<String, Source>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(untagged)]
+pub enum ProfileImport {
+    Short(ProfileImportSource),
+    Long {
+        src: ProfileImportSource,
+        #[serde(alias = "hash")]
+        rev: String,
+    },
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(untagged)]
+pub enum ProfileImportSource {
+    Url(Url),
+    Path(PathBuf),
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

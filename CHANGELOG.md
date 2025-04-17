@@ -10,6 +10,7 @@ API breaking changes
 - Added `dirname` method in `SourceKind`
 - Verify file hashes in `DownloadData::download`
 - Added `rev` a user-provided file hash in `DownloadData`
+- Add rev and url source to profile imports
 
 ## `ogj-v2.0.1-alpha`
 
