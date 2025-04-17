@@ -519,7 +519,7 @@ impl<'de> Visitor<'de> for SourceTagVisitor {
                 (id, Some(pin)) => Ok(SourceId::PinnedModrinth(id.to_owned(), pin.to_owned())),
             },
             "file" => Ok(SourceId::File(id.into())),
-            "http" | "127.0.0.1" | "localhost" => match Url::parse(v) {
+            "http" | "https" | "127.0.0.1" | "localhost" => match Url::parse(v) {
                 Ok(url) => Ok(SourceId::Url(url)),
                 Err(e) => Err(E::custom(e)),
             },
