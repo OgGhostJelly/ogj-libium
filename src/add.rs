@@ -4,11 +4,12 @@ use crate::{
         SourceKindWithModpack,
     },
     iter_ext::IterExt as _,
-    upgrade::{check, Metadata},
-    CURSEFORGE_API, GITHUB_API, MODRINTH_API,
+    upgrade::{calculate_sha512, check, Metadata},
+    CURSEFORGE_API, GITHUB_API, MODRINTH_API, TMP_DIR,
 };
 use serde::Deserialize;
-use std::{collections::HashMap, str::FromStr};
+use std::{collections::HashMap, fs::File, io::Write as _, path::Path, str::FromStr};
+use url::Url;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -28,6 +29,8 @@ pub enum Error {
     UnsupportedClassId(Option<usize>),
     #[error("The project type '{0:?}' is not supported")]
     UnsupportedProjectType(ProjectType),
+    #[error("The file type '{0}' is not supported or unknown")]
+    UnsupportedFileType(String),
     #[error("GitHub: {0}")]
     GitHubError(String),
     #[error("GitHub: {0:#?}")]
@@ -36,6 +39,10 @@ pub enum Error {
     ModrinthError(#[from] ferinth::Error),
     #[error("CurseForge: {0}")]
     CurseForgeError(#[from] furse::Error),
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    #[error(transparent)]
+    Reqwest(#[from] reqwest::Error),
 }
 type Result<T> = std::result::Result<T, Error>;
 
@@ -87,15 +94,16 @@ struct ReleaseAsset {
 
 pub fn parse_id(id: String) -> SourceId {
     if let Ok(id) = id.parse() {
-        SourceId::Curseforge(id)
-    } else {
-        let split = id.split('/').collect_vec();
-        if split.len() == 2 {
-            SourceId::Github(split[0].to_owned(), split[1].to_owned())
-        } else {
-            SourceId::Modrinth(id)
-        }
+        return SourceId::Curseforge(id);
+    } else if let Ok(id) = id.parse() {
+        return SourceId::Url(id);
+    } else if let Some((owner, repo)) = id.split_once('/') {
+        return SourceId::Github(owner.to_owned(), repo.to_owned());
+    } else if !id.chars().all(|c| c.is_alphabetic()) {
+        return SourceId::File(id.parse().expect("PathBuf parse is infallible"));
     }
+
+    SourceId::Modrinth(id)
 }
 
 /// Adds mods from `identifiers`, and returns successful mods with their names, and unsuccessful mods with an error
@@ -112,6 +120,8 @@ pub async fn add(
     let mut mr_ids = Vec::new();
     let mut cf_ids = Vec::new();
     let mut gh_ids = Vec::new();
+    let mut file_ids = Vec::new();
+    let mut url_ids = Vec::new();
     let mut errors = Vec::new();
 
     for id in identifiers {
@@ -119,8 +129,13 @@ pub async fn add(
             SourceId::Curseforge(id) => cf_ids.push(id),
             SourceId::Modrinth(id) => mr_ids.push(id),
             SourceId::Github(o, r) => gh_ids.push((o, r)),
-
-            _ => todo!("Adding pinned projects is not supported yet"),
+            SourceId::File(path) => file_ids.push(path),
+            SourceId::Url(url) => url_ids.push(url),
+            SourceId::PinnedCurseforge(_, _)
+            | SourceId::PinnedModrinth(_, _)
+            | SourceId::PinnedGithub(_, _) => {
+                todo!("\nAdding pinned projects from `add` is not yet supported\nPlease manually add the pinned project into the profile, like so: `my_mod = \"{id}\"`\n")
+            }
         }
     }
 
@@ -316,6 +331,20 @@ pub async fn add(
         }
     }
 
+    for path in file_ids {
+        match file(&path, profile, perform_checks, filters.clone()).await {
+            Ok(_) => success_names.push(format!("{}", path.display())),
+            Err(err) => errors.push((format!("{}", path.display()), err)),
+        }
+    }
+
+    for value in url_ids {
+        match url(&value, profile, perform_checks, filters.clone()).await {
+            Ok(_) => success_names.push(format!("{value}")),
+            Err(err) => errors.push((format!("{value}"), err)),
+        }
+    }
+
     Ok((success_names, errors))
 }
 
@@ -444,6 +473,90 @@ pub async fn curseforge(
 
         Ok(())
     }
+}
+
+pub async fn file(
+    path: &Path,
+    profile: &mut Profile,
+    perform_checks: bool,
+    filters: Filters,
+) -> Result<()> {
+    let filename = path.file_name().unwrap_or_default().to_string_lossy();
+    let (title, _) = filename.split_once('.').unwrap_or((&filename, ""));
+
+    // Check if the project is compatible
+    if perform_checks {
+        check::select_latest(
+            [Metadata {
+                filename: filename.to_string(),
+                title: title.to_owned(),
+                description: format!("File at path {}", path.display()),
+                game_versions: vec![],
+                loaders: vec![],
+                channel: ReleaseChannel::Release,
+            }]
+            .iter(),
+            vec![&profile.filters, &filters],
+        )
+        .await?;
+    }
+
+    // Add it to the profile
+    let kind = SourceKindWithModpack::infer(path)?
+        .ok_or(Error::UnsupportedFileType(path.display().to_string()))?
+        .into();
+
+    let id = title.to_string();
+    let source = Source::from_id(SourceId::File(path.to_path_buf()), filters);
+
+    profile.push(kind, id, source)
+}
+
+pub async fn url(
+    url: &Url,
+    profile: &mut Profile,
+    perform_checks: bool,
+    filters: Filters,
+) -> Result<()> {
+    let path = url.path();
+    let (_, filename) = path.split_once('/').unwrap_or(("", path));
+    let (title, _) = filename.split_once('.').unwrap_or((filename, ""));
+
+    // Check if the project is compatible
+    if perform_checks {
+        check::select_latest(
+            [Metadata {
+                filename: filename.to_string(),
+                title: title.to_owned(),
+                description: format!("File at url {url}"),
+                game_versions: vec![],
+                loaders: vec![],
+                channel: ReleaseChannel::Release,
+            }]
+            .iter(),
+            vec![&profile.filters, &filters],
+        )
+        .await?;
+    }
+
+    let temp_file_path = TMP_DIR.join(filename);
+    let mut temp_file = File::create(&temp_file_path)?;
+    let mut response = reqwest::get(url.clone()).await?;
+    while let Some(chunk) = response.chunk().await? {
+        temp_file.write_all(&chunk)?;
+    }
+
+    let hash = calculate_sha512(&temp_file_path)?;
+
+    // Add it to the profile
+    let kind = SourceKindWithModpack::infer(&temp_file_path)?
+        .ok_or(Error::UnsupportedFileType(url.to_string()))?
+        .into();
+
+    let id = title.to_string();
+    let source = Source::url(url.clone(), hash[..32].to_string(), filters);
+
+    profile.push(kind, id, source)
 }
 
 pub fn profile_contains(

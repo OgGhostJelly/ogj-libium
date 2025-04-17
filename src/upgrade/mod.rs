@@ -473,9 +473,7 @@ impl DownloadData {
         }
 
         if !self.rev.is_empty() {
-            let mut hasher = sha2::Sha512::new();
-            io::copy(&mut File::open(&temp_file_path)?, &mut hasher)?;
-            let hash = base16ct::lower::encode_string(&hasher.finalize());
+            let hash = calculate_sha512(&temp_file_path)?;
             for rev in self.rev {
                 if !hash.starts_with(&rev) {
                     return Err(Error::UnexpectedFileHash(rev, hash));
@@ -494,4 +492,10 @@ impl DownloadData {
             .to_string_lossy()
             .to_string()
     }
+}
+
+pub fn calculate_sha512(path: &Path) -> std::result::Result<String, io::Error> {
+    let mut hasher = sha2::Sha512::new();
+    io::copy(&mut File::open(path)?, &mut hasher)?;
+    Ok(base16ct::lower::encode_string(&hasher.finalize()))
 }

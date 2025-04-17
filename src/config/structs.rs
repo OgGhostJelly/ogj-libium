@@ -406,6 +406,18 @@ impl Source {
         Self::from_id(SourceId::Modrinth(id), filters)
     }
 
+    pub fn url(id: Url, rev: String, mut filters: Filters) -> Self {
+        filters.hashes = Some(match filters.hashes {
+            Some(mut revs) => {
+                revs.push(rev);
+                revs
+            }
+            None => vec![rev],
+        });
+
+        Self::from_id(SourceId::Url(id), filters)
+    }
+
     pub fn from_id(source_id: SourceId, filters: Filters) -> Self {
         let source = Self::Single(source_id);
 
@@ -507,6 +519,10 @@ impl<'de> Visitor<'de> for SourceTagVisitor {
                 (id, Some(pin)) => Ok(SourceId::PinnedModrinth(id.to_owned(), pin.to_owned())),
             },
             "file" => Ok(SourceId::File(id.into())),
+            "http" | "127.0.0.1" | "localhost" => match Url::parse(v) {
+                Ok(url) => Ok(SourceId::Url(url)),
+                Err(e) => Err(E::custom(e)),
+            },
             "url" => match Url::parse(id) {
                 Ok(url) => Ok(SourceId::Url(url)),
                 Err(e) => Err(E::custom(e)),
@@ -838,7 +854,14 @@ impl Filters {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.mod_loaders.is_none() && self.versions.is_none()
+        self.mod_loaders.is_none()
+            && self.versions.is_none()
+            && self.release_channels.is_none()
+            && self.filename.is_none()
+            && self.title.is_none()
+            && self.description.is_none()
+            && self.install_overrides.is_none()
+            && self.hashes.is_none()
     }
 }
 

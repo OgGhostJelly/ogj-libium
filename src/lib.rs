@@ -38,6 +38,9 @@ pub static MODRINTH_API: LazyLock<ferinth::Ferinth> = LazyLock::new(|| {
 pub static HOME: LazyLock<PathBuf> =
     LazyLock::new(|| home::home_dir().expect("Could not get user's home directory"));
 
+pub static TMP_DIR: LazyLock<PathBuf> =
+    LazyLock::new(|| HOME.join(".config").join("ferium").join(".tmp"));
+
 /// Gets the default Minecraft instance directory based on the current compilation `target_os`
 ///
 /// If the `target_os` doesn't match `"macos"`, `"linux"`, or `"windows"`, this function will not compile.
