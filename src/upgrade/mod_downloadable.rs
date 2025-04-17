@@ -1,8 +1,8 @@
 use futures_util::future::{join, join_all};
 
 use super::{
-    check, from_file, from_gh_releases, from_mr_version, try_from_cf_file, DistributionDeniedError,
-    DownloadData,
+    check, from_file, from_gh_releases, from_mr_version, from_url, try_from_cf_file,
+    DistributionDeniedError, DownloadData,
 };
 use crate::{
     config::structs::{Filters, Source, SourceId, SourceKind},
@@ -27,10 +27,10 @@ pub enum Error {
     GitHubError(#[from] octocrab::Error),
     #[error("No compatible mod sources found")]
     NoCompatibleSources,
-    #[error(transparent)]
-    Io(#[from] std::io::Error),
     #[error("'file:' cannot be used in an embedded profile")]
     CantUseFileSource,
+    #[error(transparent)]
+    Io(#[from] crate::upgrade::Error),
 }
 type Result<T> = std::result::Result<T, Error>;
 
@@ -103,6 +103,7 @@ impl SourceId {
                 Some(src_path) => vec![from_file(kind, src_path, path)?],
                 None => return Err(Error::CantUseFileSource),
             },
+            SourceId::Url(url) => vec![from_url(kind, url).await?],
             SourceId::PinnedCurseforge(mod_id, pin) => {
                 let (mod_file, mod_) = join(
                     CURSEFORGE_API.get_mod_file(*mod_id, *pin),

@@ -5,8 +5,10 @@
 API breaking changes
 
 - Added `SourceId::File`
+- Added `SourceId::Url`
 - Multiple sources in `DownloadData`
 - Added `dirname` method in `SourceKind`
+- Verify file hashes in `DownloadData::download`
 
 ## `ogj-v2.0.1-alpha`
 

@@ -15,6 +15,7 @@ use std::{
     path::{Path, PathBuf},
     str::FromStr,
 };
+use url::Url;
 use zip::{result::ZipError, ZipArchive};
 
 use super::{options::OptionsOverrides, read_profile, write_profile};
@@ -425,6 +426,7 @@ pub enum SourceId {
     Modrinth(String),
     Github(String, String),
     File(PathBuf),
+    Url(Url),
 
     PinnedCurseforge(i32, i32),
     PinnedModrinth(String, String),
@@ -438,6 +440,7 @@ impl fmt::Display for SourceId {
             SourceId::Modrinth(id) => write!(f, "mr:{id}"),
             SourceId::Github(owner, repo) => write!(f, "gh:{owner}/{repo}"),
             SourceId::File(file) => write!(f, "file:{}", file.display()),
+            SourceId::Url(url) => write!(f, "url:{url}"),
             SourceId::PinnedCurseforge(id, pin) => write!(f, "cf:{id}*{pin}"),
             SourceId::PinnedModrinth(id, pin) => write!(f, "mr:{id}*{pin}"),
             SourceId::PinnedGithub((owner, repo), pin) => write!(f, "gh:{owner}/{repo}*{pin}"),
@@ -504,6 +507,10 @@ impl<'de> Visitor<'de> for SourceTagVisitor {
                 (id, Some(pin)) => Ok(SourceId::PinnedModrinth(id.to_owned(), pin.to_owned())),
             },
             "file" => Ok(SourceId::File(id.into())),
+            "url" => match Url::parse(id) {
+                Ok(url) => Ok(SourceId::Url(url)),
+                Err(e) => Err(E::custom(e)),
+            },
             "gh" | "github" => {
                 let parsed = parse_with_pin(
                     id,
@@ -700,6 +707,9 @@ pub struct Filters {
     pub description: Option<Regex>,
     #[serde(default)]
     pub install_overrides: Option<bool>,
+    #[serde(default, with = "MaybeListOrSingle")]
+    #[serde(alias = "rev", alias = "hash")]
+    pub hashes: Option<Vec<String>>,
 }
 
 #[derive(Deserialize)]
@@ -775,6 +785,7 @@ impl Filters {
                 (None, None) => None,
                 (None, Some(val)) | (Some(val), None) | (Some(_), Some(val)) => Some(val),
             },
+            hashes: concat_opts(self.hashes, other.hashes),
         }
     }
 

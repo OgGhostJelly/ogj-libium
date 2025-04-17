@@ -11,17 +11,21 @@ use crate::{
 };
 use ferinth::structures::{
     project::ProjectType,
-    version::{DependencyType as MRDependencyType, Version as MRVersion, VersionType},
+    version::{
+        DependencyType as MRDependencyType, Hash as MRHash, Version as MRVersion, VersionType,
+    },
 };
 use furse::structures::file_structs::{
-    File as CFFile, FileRelationType as CFFileRelationType, FileReleaseType,
+    File as CFFile, FileHash as CFHash, FileRelationType as CFFileRelationType, FileReleaseType,
+    HashAlgo as CFHashAlgo,
 };
+use md5::Digest;
 use octocrab::models::repos::{Asset as GHAsset, Release as GHRelease};
 use reqwest::{Client, Url};
 use std::{
     ffi::OsStr,
     fs::{self, create_dir_all, rename, File, OpenOptions},
-    io::{self, BufWriter, Write},
+    io::{self, BufWriter, SeekFrom, Write},
     path::{Path, PathBuf},
     str::FromStr,
 };
@@ -31,6 +35,8 @@ use std::{
 pub enum Error {
     ReqwestError(#[from] reqwest::Error),
     IOError(#[from] std::io::Error),
+    #[error("expected file hash {0} but got {1}")]
+    UnexpectedFileHash(String, String),
 }
 type Result<T> = std::result::Result<T, Error>;
 
@@ -64,9 +70,64 @@ pub struct DownloadData {
     pub conflicts: Vec<SourceId>,
     /// The kind of source file, `None` if the kind is unknown.
     pub kind: Option<SourceKindWithModpack>,
+    /// The expected hash of the file.
+    /// The hash is provided by the source (e.g Github)
+    /// and is recalculated and compared when downloading.
+    pub hash: Option<Hash>,
 }
 
-/// Installable data from the users filesystem.
+#[derive(Debug, Clone)]
+pub enum Hash {
+    Curseforge(Vec<CFHash>),
+    Modrinth(MRHash),
+}
+
+impl Hash {
+    /// Compare the hash to a reader object.
+    /// If the reader is a file, there is no guarantee where the file cursor will end up.
+    fn compare<R>(&self, reader: &mut R) -> Result<()>
+    where
+        R: io::Read + io::Seek,
+    {
+        match self {
+            Hash::Curseforge(hashes) => {
+                for hash in hashes {
+                    match hash.algo {
+                        CFHashAlgo::Sha1 => {
+                            Self::compare_hash::<sha1::Sha1, _>(&hash.value, reader)?
+                        }
+                        CFHashAlgo::Md5 => Self::compare_hash::<md5::Md5, _>(&hash.value, reader)?,
+                    }
+                    reader.seek(SeekFrom::Start(0))?;
+                }
+            }
+            Hash::Modrinth(hash) => {
+                Self::compare_hash::<sha1::Sha1, _>(&hash.sha1, reader)?;
+                reader.seek(SeekFrom::Start(0))?;
+                Self::compare_hash::<sha2::Sha512, _>(&hash.sha512, reader)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn compare_hash<D, R>(expected: &str, reader: &mut R) -> Result<()>
+    where
+        D: Digest + io::Write,
+        R: ?Sized + io::Read,
+    {
+        let mut hasher = D::new();
+        io::copy(reader, &mut hasher)?;
+        let hash = hasher.finalize();
+        let got = base16ct::lower::encode_string(&hash);
+        if expected != got {
+            return Err(Error::UnexpectedFileHash(expected.to_string(), got));
+        }
+        Ok(())
+    }
+}
+
+/// The source of some downloadable data.
 #[derive(Debug, Clone)]
 pub enum DownloadSource {
     Url(Url),
@@ -131,6 +192,7 @@ pub fn try_from_cf_file(
                 })
                 .collect_vec(),
             kind: class_id.and_then(SourceKindWithModpack::from_cf_class_id),
+            hash: Some(Hash::Curseforge(file.hashes)),
         },
     ))
 }
@@ -182,6 +244,7 @@ pub fn from_mr_version(
                     }
                 })
                 .collect_vec(),
+            hash: Some(Hash::Modrinth(version.get_version_file().hashes.clone())),
             conflicts: version
                 .dependencies
                 .into_iter()
@@ -254,6 +317,7 @@ pub fn from_gh_asset(kind: SourceKind, asset: GHAsset) -> DownloadData {
         dependencies: Vec::new(),
         conflicts: Vec::new(),
         kind: None,
+        hash: None,
     }
 }
 
@@ -261,7 +325,7 @@ pub fn from_file(
     kind: SourceKind,
     src_path: &Path,
     path: &Path,
-) -> std::result::Result<(Metadata, DownloadData), io::Error> {
+) -> Result<(Metadata, DownloadData)> {
     let path = src_path.join(path);
 
     let length = File::open(&path)?.metadata()?.len();
@@ -272,11 +336,9 @@ pub fn from_file(
     Ok((
         Metadata {
             title: {
-                let s = filename.to_string_lossy();
-                match s.find('.') {
-                    Some(i) => s[i + 1..].to_string(),
-                    None => s.to_string(),
-                }
+                let filename = filename.to_string_lossy();
+                let (title, _) = filename.split_once('.').unwrap_or((&filename, ""));
+                title.to_string()
             },
             description: format!("File at path {}", path.display()),
             filename: filename
@@ -294,6 +356,39 @@ pub fn from_file(
             dependencies: vec![],
             conflicts: vec![],
             kind: inferred_kind,
+            hash: None,
+        },
+    ))
+}
+
+pub async fn from_url(kind: SourceKind, url: &Url) -> Result<(Metadata, DownloadData)> {
+    let path = url.path();
+    let (_, filename) = path.split_once('/').unwrap_or(("", path));
+    let (title, _) = filename.split_once('.').unwrap_or((filename, ""));
+    let output = kind.directory().join(filename);
+
+    let length = reqwest::get(url.clone())
+        .await?
+        .content_length()
+        .unwrap_or(0);
+
+    Ok((
+        Metadata {
+            title: title.to_string(),
+            description: format!("File at url {url}"),
+            filename: filename.to_string(),
+            channel: ReleaseChannel::Release,
+            game_versions: vec![],
+            loaders: vec![],
+        },
+        DownloadData {
+            src: DownloadSource::Url(url.clone()),
+            output,
+            length,
+            dependencies: vec![],
+            conflicts: vec![],
+            kind: None,
+            hash: None,
         },
     ))
 }
@@ -311,6 +406,7 @@ pub fn from_modpack_file(file: modrinth::ModpackFile) -> DownloadData {
         dependencies: Vec::new(),
         conflicts: Vec::new(),
         kind: None,
+        hash: Some(Hash::Modrinth(file.hashes)),
     }
 }
 
@@ -361,6 +457,11 @@ impl DownloadData {
         };
 
         temp_file.flush()?;
+
+        if let Some(hash) = self.hash {
+            hash.compare(&mut File::open(&temp_file_path)?)?;
+        }
+
         rename(temp_file_path, out_file_path)?;
         Ok((size as usize, filename))
     }
