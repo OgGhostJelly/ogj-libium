@@ -31,9 +31,9 @@ pub async fn scan(
     for entry in read_dir(dir_path)? {
         let path = entry?.path();
         if path.is_file()
-            && path
-                .extension()
-                .is_some_and(|ext| ext.eq_ignore_ascii_case("jar"))
+            && path.extension().is_some_and(|ext| {
+                ext.eq_ignore_ascii_case("jar") || ext.eq_ignore_ascii_case("zip")
+            })
         {
             let bytes = read(&path)?;
 

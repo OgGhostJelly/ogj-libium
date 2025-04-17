@@ -36,8 +36,6 @@ pub struct Config {
 #[serde(rename_all = "kebab-case")]
 pub struct ProfileItem {
     /// The profile source
-    // The field used to be called 'path' so its aliased to that for legacy reasons
-    #[serde(alias = "path")]
     pub profile: ProfileSource,
     #[serde(flatten)]
     pub config: ProfileItemConfig,
@@ -200,8 +198,7 @@ pub enum ProfileImport {
     Short(ProfileImportSource),
     Long {
         src: ProfileImportSource,
-        #[serde(alias = "hash")]
-        rev: String,
+        hash: String,
     },
 }
 
@@ -424,13 +421,13 @@ impl Source {
         Self::from_id(SourceId::Modrinth(id), filters)
     }
 
-    pub fn url(id: Url, rev: String, mut filters: Filters) -> Self {
+    pub fn url(id: Url, hash: String, mut filters: Filters) -> Self {
         filters.hashes = Some(match filters.hashes {
-            Some(mut revs) => {
-                revs.push(rev);
-                revs
+            Some(mut hashes) => {
+                hashes.push(hash);
+                hashes
             }
-            None => vec![rev],
+            None => vec![hash],
         });
 
         Self::from_id(SourceId::Url(id), filters)
@@ -742,7 +739,7 @@ pub struct Filters {
     #[serde(default)]
     pub install_overrides: Option<bool>,
     #[serde(default, with = "MaybeListOrSingle")]
-    #[serde(alias = "rev", alias = "hash")]
+    #[serde(alias = "hash")]
     pub hashes: Option<Vec<String>>,
 }
 

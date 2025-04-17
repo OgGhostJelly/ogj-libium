@@ -78,10 +78,10 @@ pub struct DownloadData {
     /// The hash is provided by the source (e.g Github)
     /// and is recalculated and compared when downloading.
     pub hash: Option<Hash>,
-    /// The revisions (user provided hashes) in the lowercase base16 sha512 format.
-    /// The hash is calculated and compared to every rev when downloading.
-    /// If any of the revs are not equal to the file hash, an error will be raised.
-    pub rev: Vec<String>,
+    /// User-provided hashes in sha512 (base16) format.
+    /// The hash is calculated and compared when downloading.
+    /// If any of the hashes are not equal, an error will be raised.
+    pub user_hash: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -201,7 +201,7 @@ pub fn try_from_cf_file(
                 .collect_vec(),
             kind: class_id.and_then(SourceKindWithModpack::from_cf_class_id),
             hash: Some(Hash::Curseforge(file.hashes)),
-            rev: vec![],
+            user_hash: vec![],
         },
     ))
 }
@@ -272,7 +272,7 @@ pub fn from_mr_version(
                 })
                 .collect_vec(),
             kind: project_type.and_then(SourceKindWithModpack::from_mr_project_type),
-            rev: vec![],
+            user_hash: vec![],
         },
     )
 }
@@ -328,7 +328,7 @@ pub fn from_gh_asset(kind: SourceKind, asset: GHAsset) -> DownloadData {
         conflicts: Vec::new(),
         kind: None,
         hash: None,
-        rev: vec![],
+        user_hash: vec![],
     }
 }
 
@@ -368,7 +368,7 @@ pub fn from_file(
             conflicts: vec![],
             kind: inferred_kind,
             hash: None,
-            rev: vec![],
+            user_hash: vec![],
         },
     ))
 }
@@ -401,7 +401,7 @@ pub async fn from_url(kind: SourceKind, url: &Url) -> Result<(Metadata, Download
             conflicts: vec![],
             kind: None,
             hash: None,
-            rev: vec![],
+            user_hash: vec![],
         },
     ))
 }
@@ -420,7 +420,7 @@ pub fn from_modpack_file(file: modrinth::ModpackFile) -> DownloadData {
         conflicts: Vec::new(),
         kind: None,
         hash: Some(Hash::Modrinth(file.hashes)),
-        rev: vec![],
+        user_hash: vec![],
     }
 }
 
@@ -476,11 +476,11 @@ impl DownloadData {
             hash.compare(&mut File::open(&temp_file_path)?)?;
         }
 
-        if !self.rev.is_empty() {
+        if !self.user_hash.is_empty() {
             let hash = calculate_sha512(&temp_file_path)?;
-            for rev in self.rev {
-                if !hash.starts_with(&rev) {
-                    return Err(Error::UnexpectedFileHash(rev, hash));
+            for expected in self.user_hash {
+                if !hash.starts_with(&expected.to_ascii_lowercase()) {
+                    return Err(Error::UnexpectedFileHash(expected, hash));
                 }
             }
         }
@@ -508,11 +508,11 @@ impl ProfileImport {
     pub async fn download(&self) -> Result<PathBuf> {
         match self {
             ProfileImport::Short(src) => src.download().await,
-            ProfileImport::Long { src, rev } => {
+            ProfileImport::Long { src, hash } => {
                 let path = src.download().await?;
-                let hash = calculate_sha512(&path)?;
-                if !hash.starts_with(rev) {
-                    return Err(Error::UnexpectedFileHash(rev.clone(), hash));
+                let file_hash = calculate_sha512(&path)?;
+                if !file_hash.starts_with(&hash.to_ascii_lowercase()) {
+                    return Err(Error::UnexpectedFileHash(hash.clone(), file_hash));
                 }
                 Ok(path)
             }

@@ -135,22 +135,22 @@ impl SourceId {
             }
         };
 
-        let rev = {
-            let mut rev = vec![];
+        let hashes = {
+            let mut hashes = vec![];
             for filter in &filters {
-                let Some(hashes) = &filter.hashes else {
+                let Some(new_hashes) = &filter.hashes else {
                     continue;
                 };
 
-                for value in hashes {
-                    rev.push(value.clone())
+                for value in new_hashes {
+                    hashes.push(value.clone())
                 }
             }
-            rev
+            hashes
         };
 
         for (_, downloadable) in &mut download_files {
-            downloadable.rev = rev.clone()
+            downloadable.user_hash = hashes.clone()
         }
 
         let index =
