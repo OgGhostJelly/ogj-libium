@@ -9,6 +9,7 @@ API breaking changes
 - Multiple sources in `DownloadData`
 - Added `dirname` method in `SourceKind`
 - Verify file hashes in `DownloadData::download`
+- Added `rev` a user-provided file hash in `DownloadData`
 
 ## `ogj-v2.0.1-alpha`
 

@@ -74,6 +74,10 @@ pub struct DownloadData {
     /// The hash is provided by the source (e.g Github)
     /// and is recalculated and compared when downloading.
     pub hash: Option<Hash>,
+    /// The revisions (user provided hashes) in the lowercase base16 sha512 format.
+    /// The hash is calculated and compared to every rev when downloading.
+    /// If any of the revs are not equal to the file hash, an error will be raised.
+    pub rev: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -193,6 +197,7 @@ pub fn try_from_cf_file(
                 .collect_vec(),
             kind: class_id.and_then(SourceKindWithModpack::from_cf_class_id),
             hash: Some(Hash::Curseforge(file.hashes)),
+            rev: vec![],
         },
     ))
 }
@@ -263,6 +268,7 @@ pub fn from_mr_version(
                 })
                 .collect_vec(),
             kind: project_type.and_then(SourceKindWithModpack::from_mr_project_type),
+            rev: vec![],
         },
     )
 }
@@ -318,6 +324,7 @@ pub fn from_gh_asset(kind: SourceKind, asset: GHAsset) -> DownloadData {
         conflicts: Vec::new(),
         kind: None,
         hash: None,
+        rev: vec![],
     }
 }
 
@@ -357,6 +364,7 @@ pub fn from_file(
             conflicts: vec![],
             kind: inferred_kind,
             hash: None,
+            rev: vec![],
         },
     ))
 }
@@ -389,6 +397,7 @@ pub async fn from_url(kind: SourceKind, url: &Url) -> Result<(Metadata, Download
             conflicts: vec![],
             kind: None,
             hash: None,
+            rev: vec![],
         },
     ))
 }
@@ -407,6 +416,7 @@ pub fn from_modpack_file(file: modrinth::ModpackFile) -> DownloadData {
         conflicts: Vec::new(),
         kind: None,
         hash: Some(Hash::Modrinth(file.hashes)),
+        rev: vec![],
     }
 }
 
@@ -460,6 +470,17 @@ impl DownloadData {
 
         if let Some(hash) = self.hash {
             hash.compare(&mut File::open(&temp_file_path)?)?;
+        }
+
+        if !self.rev.is_empty() {
+            let mut hasher = sha2::Sha512::new();
+            io::copy(&mut File::open(&temp_file_path)?, &mut hasher)?;
+            let hash = base16ct::lower::encode_string(&hasher.finalize());
+            for rev in self.rev {
+                if !hash.starts_with(&rev) {
+                    return Err(Error::UnexpectedFileHash(rev, hash));
+                }
+            }
         }
 
         rename(temp_file_path, out_file_path)?;

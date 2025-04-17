@@ -65,7 +65,7 @@ impl SourceId {
         kind: SourceKind,
         filters: Vec<&Filters>,
     ) -> Result<DownloadData> {
-        let download_files = match self {
+        let mut download_files = match self {
             SourceId::Curseforge(id) => {
                 let (files, mod_) = join(
                     CURSEFORGE_API.get_mod_files(*id),
@@ -134,6 +134,24 @@ impl SourceId {
                 ))
             }
         };
+
+        let rev = {
+            let mut rev = vec![];
+            for filter in &filters {
+                let Some(hashes) = &filter.hashes else {
+                    continue;
+                };
+
+                for value in hashes {
+                    rev.push(value.clone())
+                }
+            }
+            rev
+        };
+
+        for (_, downloadable) in &mut download_files {
+            downloadable.rev = rev.clone()
+        }
 
         let index =
             super::check::select_latest(download_files.iter().map(|(m, _)| m), filters).await?;
