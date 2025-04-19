@@ -1,6 +1,6 @@
 [package]
 name = "ogj-libium"
-version = "2.0.2-alpha"
+version = "2.0.3-alpha"
 edition = "2021"
 authors = [
     "Ilesh Thiada (theRookieCoder) <ileshkt@gmail.com>",

@@ -1,5 +1,9 @@
 # Changelog for Libium
 
+## `ogj-v2.0.3-alpha`
+
+
+
 ## `ogj-v2.0.2-alpha`
 
 API breaking changes
@@ -11,6 +15,8 @@ API breaking changes
 - Verify file hashes in `DownloadData::download`
 - Added a user-provided file hash in `DownloadData`
 - Add file hash and url source to profile imports
+- Fixed directories not copying when downloading modpacks
+- Fix typos
 
 ## `ogj-v2.0.1-alpha`
 
