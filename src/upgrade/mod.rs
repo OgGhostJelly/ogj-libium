@@ -580,7 +580,7 @@ impl ProfileImportSource {
             ProfileImportSource::Path(path) => Ok(path.clone()),
             ProfileImportSource::Url(url) => {
                 let path = url.path();
-                let (_, filename) = path.split_once('/').unwrap_or(("", path));
+                let (_, filename) = path.rsplit_once('/').unwrap_or(("", path));
                 let temp_file_path = TMP_DIR.join(filename);
 
                 let mut temp_file = File::create(&temp_file_path)?;
