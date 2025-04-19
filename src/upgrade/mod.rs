@@ -559,11 +559,11 @@ pub fn calculate_sha512(path: &Path) -> std::result::Result<String, io::Error> {
 }
 
 impl ProfileImport {
-    pub async fn download(&self) -> Result<PathBuf> {
+    pub async fn download(&self, src_path: &Path) -> Result<PathBuf> {
         match self {
-            ProfileImport::Short(src) => src.download().await,
+            ProfileImport::Short(src) => src.download(src_path).await,
             ProfileImport::Long { src, hash } => {
-                let path = src.download().await?;
+                let path = src.download(src_path).await?;
                 let file_hash = calculate_sha512(&path)?;
                 if !file_hash.starts_with(&hash.to_ascii_lowercase()) {
                     return Err(Error::UnexpectedFileHash(hash.clone(), file_hash));
@@ -575,9 +575,9 @@ impl ProfileImport {
 }
 
 impl ProfileImportSource {
-    pub async fn download(&self) -> Result<PathBuf> {
+    pub async fn download(&self, src_path: &Path) -> Result<PathBuf> {
         match self {
-            ProfileImportSource::Path(path) => Ok(path.clone()),
+            ProfileImportSource::Path(path) => Ok(src_path.join(path)),
             ProfileImportSource::Url(url) => {
                 let path = url.path();
                 let (_, filename) = path.rsplit_once('/').unwrap_or(("", path));
