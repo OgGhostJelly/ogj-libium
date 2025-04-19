@@ -154,6 +154,8 @@ pub fn try_from_cf_file(
     file: CFFile,
     class_id: Option<usize>,
 ) -> std::result::Result<(Metadata, DownloadData), DistributionDeniedError> {
+    let inferred_kind = class_id.and_then(SourceKindWithModpack::from_cf_class_id);
+
     Ok((
         Metadata {
             title: file.display_name,
@@ -176,7 +178,7 @@ pub fn try_from_cf_file(
                 file.download_url
                     .ok_or(DistributionDeniedError(file.mod_id, file.id))?,
             ),
-            output: kind.directory().join(file.file_name.as_str()),
+            output: kind.directory(inferred_kind).join(file.file_name.as_str()),
             length: file.file_length as u64,
             dependencies: file
                 .dependencies
@@ -200,7 +202,7 @@ pub fn try_from_cf_file(
                     }
                 })
                 .collect_vec(),
-            kind: class_id.and_then(SourceKindWithModpack::from_cf_class_id),
+            kind: inferred_kind,
             hash: Some(Hash::Curseforge(file.hashes)),
             user_hash: vec![],
         },
@@ -212,6 +214,8 @@ pub fn from_mr_version(
     version: MRVersion,
     project_type: Option<ProjectType>,
 ) -> (Metadata, DownloadData) {
+    let inferred_kind = project_type.and_then(SourceKindWithModpack::from_mr_project_type);
+
     (
         Metadata {
             title: version.name.clone(),
@@ -233,7 +237,7 @@ pub fn from_mr_version(
         DownloadData {
             src: DownloadSource::Url(version.get_version_file().url.clone()),
             output: kind
-                .directory()
+                .directory(inferred_kind)
                 .join(version.get_version_file().filename.as_str()),
             length: version.get_version_file().size as u64,
             dependencies: version
@@ -272,7 +276,7 @@ pub fn from_mr_version(
                     }
                 })
                 .collect_vec(),
-            kind: project_type.and_then(SourceKindWithModpack::from_mr_project_type),
+            kind: inferred_kind,
             user_hash: vec![],
         },
     )
@@ -321,13 +325,15 @@ pub fn from_gh_releases(
 }
 
 pub fn from_gh_asset(kind: SourceKind, asset: GHAsset) -> DownloadData {
+    let inferred_kind = None;
+
     DownloadData {
         src: DownloadSource::Url(asset.browser_download_url),
-        output: kind.directory().join(asset.name),
+        output: kind.directory(inferred_kind).join(asset.name),
         length: asset.size as u64,
         dependencies: Vec::new(),
         conflicts: Vec::new(),
-        kind: None,
+        kind: inferred_kind,
         hash: None,
         user_hash: vec![],
     }
@@ -342,8 +348,8 @@ pub fn from_file(
 
     let length = File::open(&path)?.metadata()?.len();
     let filename = path.file_name().unwrap_or(OsStr::new("")).to_os_string();
-    let output = kind.directory().join(&filename);
     let inferred_kind = SourceKindWithModpack::infer(&path)?;
+    let output = kind.directory(inferred_kind).join(&filename);
 
     Ok((
         Metadata {
@@ -378,7 +384,8 @@ pub async fn from_url(kind: SourceKind, url: &Url) -> Result<(Metadata, Download
     let path = url.path();
     let (_, filename) = path.split_once('/').unwrap_or(("", path));
     let (title, _) = filename.split_once('.').unwrap_or((filename, ""));
-    let output = kind.directory().join(filename);
+    let inferred_kind = None;
+    let output = kind.directory(inferred_kind).join(filename);
 
     let length = reqwest::get(url.clone())
         .await?
@@ -400,7 +407,7 @@ pub async fn from_url(kind: SourceKind, url: &Url) -> Result<(Metadata, Download
             length,
             dependencies: vec![],
             conflicts: vec![],
-            kind: None,
+            kind: inferred_kind,
             hash: None,
             user_hash: vec![],
         },

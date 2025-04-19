@@ -633,8 +633,13 @@ impl SourceKind {
         }
     }
 
-    pub fn directory(&self) -> &'static Path {
-        Path::new(self.dirname().unwrap_or(""))
+    pub fn directory(&self, inferred_kind: Option<SourceKindWithModpack>) -> &'static Path {
+        let kind = match inferred_kind {
+            Some(kind) => &kind.to_kind(),
+            None => self,
+        };
+
+        Path::new(kind.dirname().unwrap_or(""))
     }
 }
 
