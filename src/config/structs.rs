@@ -198,7 +198,7 @@ pub enum ProfileImport {
     Short(ProfileImportSource),
     Long {
         src: ProfileImportSource,
-        hash: String,
+        hash: Option<String>,
     },
 }
 

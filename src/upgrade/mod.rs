@@ -568,8 +568,13 @@ pub fn calculate_sha512(path: &Path) -> std::result::Result<String, io::Error> {
 impl ProfileImport {
     pub async fn download(&self, src_path: &Path) -> Result<PathBuf> {
         match self {
-            ProfileImport::Short(src) => src.download(src_path).await,
-            ProfileImport::Long { src, hash } => {
+            ProfileImport::Short(src) | ProfileImport::Long { src, hash: None } => {
+                src.download(src_path).await
+            }
+            ProfileImport::Long {
+                src,
+                hash: Some(hash),
+            } => {
                 let path = src.download(src_path).await?;
                 let file_hash = calculate_sha512(&path)?;
                 if !file_hash.starts_with(&hash.to_ascii_lowercase()) {
