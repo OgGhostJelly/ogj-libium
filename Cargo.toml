@@ -45,3 +45,4 @@ strum = { version = "0.27.1", features = ["derive"] }
 md-5 = "0.10.6"
 sha2 = "0.10.8"
 base16ct = { version = "0.2.0", features = ["alloc"] }
+fs_extra = "1.3"

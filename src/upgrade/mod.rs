@@ -39,6 +39,7 @@ use std::{
 pub enum Error {
     ReqwestError(#[from] reqwest::Error),
     IOError(#[from] std::io::Error),
+    FsExtraError(#[from] fs_extra::error::Error),
     #[error("expected file hash {0} but got {1}")]
     UnexpectedFileHash(String, String),
 }
@@ -436,57 +437,49 @@ impl DownloadData {
         output_dir: impl AsRef<Path>,
         update: impl Fn(usize) + Send,
     ) -> Result<(usize, String)> {
-        let (filename, src, size) = (self.filename(), self.src, self.length);
+        let (size, filename) = (self.length as usize, self.filename());
         let out_file_path = output_dir.as_ref().join(&self.output);
-        let temp_file_path = out_file_path.with_extension("part");
-        if let Some(up_dir) = out_file_path.parent() {
-            create_dir_all(up_dir)?;
-        }
 
-        let mut temp_file = BufWriter::with_capacity(
-            size as usize,
-            OpenOptions::new()
-                .append(true)
-                .create(true)
-                .open(&temp_file_path)?,
-        );
-
-        match src {
+        match self.src {
             DownloadSource::Url(url) => {
+                let mut temp_file = TempFile::new(&out_file_path, size)?;
+
                 let mut response = client.get(url).send().await?;
                 while let Some(chunk) = response.chunk().await? {
-                    temp_file.write_all(&chunk)?;
+                    temp_file.file.write_all(&chunk)?;
                     update(chunk.len());
                 }
+
+                temp_file.finalize(self.hash, self.user_hash)
             }
             DownloadSource::Contents(data) => {
+                let mut temp_file = TempFile::new(&out_file_path, size)?;
+
                 let data = data.as_bytes();
-                temp_file.write_all(data)?;
+                temp_file.file.write_all(data)?;
                 update(data.len());
+
+                temp_file.finalize(self.hash, self.user_hash)
             }
             DownloadSource::Path(path) => {
-                let bytes = fs::copy(&path, &temp_file_path)?;
-                update(bytes as usize);
-            }
-        };
+                if path.is_dir() {
+                    fs_extra::dir::copy(
+                        path,
+                        out_file_path,
+                        &fs_extra::dir::CopyOptions::new().overwrite(true),
+                    )?;
 
-        temp_file.flush()?;
+                    Ok((size, filename))
+                } else {
+                    let temp_file = TempFile::new(&out_file_path, size)?;
 
-        if let Some(hash) = self.hash {
-            hash.compare(&mut File::open(&temp_file_path)?)?;
-        }
+                    let bytes = fs::copy(path, &temp_file.tmp_path)?;
+                    update(bytes as usize);
 
-        if !self.user_hash.is_empty() {
-            let hash = calculate_sha512(&temp_file_path)?;
-            for expected in self.user_hash {
-                if !hash.starts_with(&expected.to_ascii_lowercase()) {
-                    return Err(Error::UnexpectedFileHash(expected, hash));
+                    temp_file.finalize(self.hash, self.user_hash)
                 }
             }
         }
-
-        rename(temp_file_path, out_file_path)?;
-        Ok((size as usize, filename))
     }
 
     pub fn filename(&self) -> String {
@@ -495,6 +488,67 @@ impl DownloadData {
             .unwrap_or_default()
             .to_string_lossy()
             .to_string()
+    }
+}
+
+pub struct TempFile {
+    tmp_path: PathBuf,
+    out_path: PathBuf,
+    file: BufWriter<File>,
+}
+
+impl TempFile {
+    /// Create a `.part` file.
+    pub fn new(out_file_path: &Path, capacity: usize) -> Result<Self> {
+        let temp_file_path = out_file_path.with_extension("part");
+        if let Some(up_dir) = out_file_path.parent() {
+            create_dir_all(up_dir)?;
+        }
+
+        let temp_file = BufWriter::with_capacity(
+            capacity,
+            OpenOptions::new()
+                .append(true)
+                .create(true)
+                .open(&temp_file_path)?,
+        );
+
+        Ok(Self {
+            tmp_path: temp_file_path,
+            out_path: out_file_path.to_path_buf(),
+            file: temp_file,
+        })
+    }
+
+    /// Compare hashes and remove the `.part` extension.
+    pub fn finalize(
+        mut self,
+        hash: Option<Hash>,
+        user_hash: Vec<String>,
+    ) -> Result<(usize, String)> {
+        self.file.flush()?;
+
+        if let Some(hash) = hash {
+            hash.compare(&mut File::open(&self.tmp_path)?)?;
+        }
+
+        if !user_hash.is_empty() {
+            let hash = calculate_sha512(&self.tmp_path)?;
+            for expected in user_hash {
+                if !hash.starts_with(&expected.to_ascii_lowercase()) {
+                    return Err(Error::UnexpectedFileHash(expected, hash));
+                }
+            }
+        }
+
+        let filename = self
+            .out_path
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+        rename(self.tmp_path, self.out_path)?;
+        Ok((self.file.capacity(), filename))
     }
 }
 
