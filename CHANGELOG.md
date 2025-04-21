@@ -3,6 +3,9 @@
 ## `ogj-v2.0.3-alpha`
 
 - Fix profile import not relative to profile
+- Fix output directory inference failing with mod dependencies
+- Fix profile import hash being non-optional
+- Fix crash due to missing `TMP_DIR` when importing profiles
 
 ## `ogj-v2.0.2-alpha`
 
