@@ -62,7 +62,11 @@ impl Options {
 
 impl Options {
     /// Write the `options.txt` file to a writer.
-    pub fn write<W: io::Write>(&self, write: &mut W) -> Result<(), io::Error> {
+    pub fn write<W: io::Write>(
+        &self,
+        write: &mut W,
+        mut _err_handler: impl FnMut(WriteError) + Clone,
+    ) -> Result<(), io::Error> {
         let mut iter: Vec<(&String, &String)> = self.fields.iter().collect();
 
         iter.sort();
@@ -81,17 +85,17 @@ impl Options {
     }
 
     /// Read the `options.txt` file from a reader.
-    pub fn read<R: io::BufRead>(reader: R) -> Result<Self, io::Error> {
+    pub fn read<R: io::BufRead>(
+        reader: R,
+        mut err_handler: impl FnMut(ReadError) + Clone,
+    ) -> Result<Self, io::Error> {
         let mut options = HashMap::new();
 
         for (lineno, line) in reader.lines().enumerate() {
             let mut line = line?;
 
             let Some(index) = line.find(':') else {
-                eprintln!(
-                    "WARNING: option with no ':' delimiter found at lineno {}",
-                    lineno + 1
-                );
+                err_handler(ReadError::MissingDelimiter(lineno + 1, line));
                 continue;
             };
 
@@ -137,13 +141,17 @@ impl Options {
     pub fn apply(
         &mut self,
         overrides: OptionsOverrides,
-        err_handler: impl FnMut(OverrideError) + Clone,
+        mut err_handler: impl FnMut(OverrideError) + Clone,
     ) {
         for (key, value) in overrides.keybinds {
             self.apply_keybinds(&key, value, err_handler.clone());
         }
 
         for (key, value) in overrides.fields {
+            if key.starts_with("key_") {
+                err_handler(OverrideError::BadFieldPrefix(key.clone()));
+            }
+
             self.set_field(key, value);
         }
     }
@@ -157,11 +165,11 @@ impl Options {
     ) {
         match value {
             toml::Value::String(string) => match string_to_keycode(string) {
-                Ok(value) => self.set_keybind(key, value),
+                Ok(value) => self.set_keybind_with_err(key, value, err_handler),
                 Err(e) => err_handler(e),
             },
             toml::Value::Integer(num) => match i64_to_keycode(num) {
-                Ok(value) => self.set_keybind(key, value),
+                Ok(value) => self.set_keybind_with_err(key, value, err_handler),
                 Err(e) => err_handler(e),
             },
             toml::Value::Table(table) => {
@@ -177,6 +185,20 @@ impl Options {
                 err_handler(OverrideError::InvalidKeycodeType(v.type_str()))
             }
         }
+    }
+
+    fn set_keybind_with_err(
+        &mut self,
+        keybind: &str,
+        keycode: Keycode,
+        mut err_handler: impl FnMut(OverrideError) + Clone,
+    ) {
+        println!("keybind: {keybind}");
+        if !keybind.starts_with("key_") {
+            err_handler(OverrideError::BadKeybindPrefix(keybind.to_string()))
+        }
+
+        self.set_keybind(keybind, keycode);
     }
 }
 
@@ -209,4 +231,19 @@ pub enum OverrideError {
     InvalidKeycodeNumber(usize),
     #[error("invalid keycode id: keycode {0} not found")]
     InvalidKeycodeId(String),
+    #[error("keybind '{0}' doesn't start with 'key_', are you sure this is a keybind?")]
+    BadKeybindPrefix(String),
+    #[error(
+        "option '{0}' starts with 'key_', if this is a keybind you should put it in [options.keybinds]"
+    )]
+    BadFieldPrefix(String),
 }
+
+#[derive(Error, Debug)]
+pub enum ReadError {
+    #[error("option with no ':' delimiter found at lineno {0}, skipping\n  line: {1:?}")]
+    MissingDelimiter(usize, String),
+}
+
+#[derive(Error, Debug)]
+pub enum WriteError {}

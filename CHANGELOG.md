@@ -2,6 +2,7 @@
 
 ## `ogj-v2.0.3-alpha`
 
+- Add more warnings when configuring options
 - Fix profile import not relative to profile
 - Fix output directory inference failing with mod dependencies
 - Fix profile import hash being non-optional
