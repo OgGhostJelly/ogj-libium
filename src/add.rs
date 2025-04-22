@@ -3,9 +3,10 @@ use crate::{
         Filters, ModLoader, Profile, ReleaseChannel, Source, SourceId, SourceKind,
         SourceKindWithModpack,
     },
+    get_tmp_dir,
     iter_ext::IterExt as _,
     upgrade::{calculate_sha512, check, Metadata},
-    CURSEFORGE_API, GITHUB_API, MODRINTH_API, TMP_DIR,
+    CURSEFORGE_API, GITHUB_API, MODRINTH_API,
 };
 use serde::Deserialize;
 use std::{collections::HashMap, fs::File, io::Write as _, path::Path, str::FromStr};
@@ -539,7 +540,7 @@ pub async fn url(
         .await?;
     }
 
-    let temp_file_path = TMP_DIR.join(filename);
+    let temp_file_path = get_tmp_dir()?.join(filename);
     let mut temp_file = File::create(&temp_file_path)?;
     let mut response = reqwest::get(url.clone()).await?;
     while let Some(chunk) = response.chunk().await? {

@@ -9,9 +9,9 @@ use crate::{
             SourceKindWithModpack,
         },
     },
+    get_tmp_dir,
     iter_ext::IterExt as _,
     version_ext::VersionExt,
-    TMP_DIR,
 };
 use ferinth::structures::{
     project::ProjectType,
@@ -593,8 +593,7 @@ impl ProfileImportSource {
             ProfileImportSource::Url(url) => {
                 let path = url.path();
                 let (_, filename) = path.rsplit_once('/').unwrap_or(("", path));
-                create_dir_all(TMP_DIR.as_path())?;
-                let temp_file_path = TMP_DIR.join(filename);
+                let temp_file_path = get_tmp_dir()?.join(filename);
 
                 let mut temp_file = File::create(&temp_file_path)?;
                 let mut response = reqwest::get(url.clone()).await?;

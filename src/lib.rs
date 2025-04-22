@@ -8,7 +8,11 @@ pub mod version_ext;
 pub use add::add;
 pub use scan::scan;
 
-use std::{path::PathBuf, sync::LazyLock};
+use std::{
+    fs, io,
+    path::{Path, PathBuf},
+    sync::LazyLock,
+};
 
 pub static GITHUB_API: LazyLock<octocrab::Octocrab> = LazyLock::new(|| {
     let mut github = octocrab::OctocrabBuilder::new();
@@ -38,8 +42,17 @@ pub static MODRINTH_API: LazyLock<ferinth::Ferinth> = LazyLock::new(|| {
 pub static HOME: LazyLock<PathBuf> =
     LazyLock::new(|| home::home_dir().expect("Could not get user's home directory"));
 
-pub static TMP_DIR: LazyLock<PathBuf> =
-    LazyLock::new(|| HOME.join(".config").join("ferium").join(".tmp"));
+/// Get the temporary directory. Create it if it doesn't exist.
+///
+/// # Errors
+///
+/// If the temporary directory cannot be created.
+pub fn get_tmp_dir() -> io::Result<&'static Path> {
+    static TMP_DIR: LazyLock<PathBuf> =
+        LazyLock::new(|| HOME.join(".config").join("ferium").join(".tmp"));
+    fs::create_dir_all(TMP_DIR.as_path())?;
+    Ok(&TMP_DIR)
+}
 
 /// Gets the default Minecraft instance directory based on the current compilation `target_os`
 ///
